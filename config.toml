@@ -1,0 +1,32 @@
+baseURL = "https://pontarou0610.github.io/my-diary/"
+languageCode = "ja"
+title = "ぽん次郎のゆる日記"
+theme = "PaperMod"
+enableRobotsTXT = true
+
+[pagination]
+  pagerSize = 10
+
+[params]
+  author = "ぽん次郎"
+  description = "都内在住の40代会社員・3児の父。仕事・お金・子育て・趣味をゆるく綴る日記。"
+  defaultTheme = "auto"
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowCodeCopyButtons = true
+  ShowToc = true
+  mainSections = ["posts"]
+
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
+
+[taxonomies]
+  tag = "tags"
+  category = "categories"
+
+[menu]
+  [[menu.main]]
+    name = "About"
+    url = "/about/"
+    weight = 10

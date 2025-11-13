@@ -1,0 +1,64 @@
+name: Diary - Generate, Build, Deploy
+
+on:
+  schedule:
+    # 22:00 JST = 13:00 UTC
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate today's post (AI)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          node --version
+          node scripts/generate.mjs
+
+      - name: Commit new content if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: add diary entry"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Build
+        run: |
+          hugo --minify
+
+      - name: Deploy to gh-pages
+        if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./public
+          force_orphan: true
