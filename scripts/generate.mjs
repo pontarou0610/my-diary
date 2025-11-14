@@ -18,8 +18,9 @@ function formatTokyoParts(date = new Date()) {
 }
 
 function maskPrivacy(text) {
-  if (!text) return text
-  return text
+  if (text === null || text === undefined) return ''
+  const s = String(text)
+  return s
     .replace(/[\w.-]+@[\w.-]+/g, '***@***')
     .replace(/\+?\d[\d\-\s]{8,}\d/g, '***-****-****')
 }
@@ -239,4 +240,3 @@ main().catch(err => {
   console.error(err)
   process.exit(1)
 })
-
