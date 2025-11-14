@@ -1,3 +1,8 @@
+<#*
+  Generates a diary post for Ponjiro with optional AI content and cover image.
+  主に手元で「今日の日記」を作る用途。GitHub Actions 側は scripts/generate.mjs を使用。
+  Usage: pwsh scripts/generate.ps1 [-Date yyyy-mm-dd] [-Publish] [-UseAI]
+*#>
 param(
   [datetime]$Date = (Get-Date),
   [switch]$Publish,
@@ -7,7 +12,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+<#*
+  Get-DotEnv
+  .env の key=value をハッシュテーブル化して返す簡易ローダ。
+  引数 : FilePath (.env のパス)
+  戻り値 : [hashtable]
+*#>
 function Get-DotEnv {
+  # .env の key=value を読み込んで hashtable で返す
+  # Tiny .env loader so we can keep API keys outside git
   param([string]$FilePath)
   if (-not (Test-Path $FilePath)) { return @{} }
   $map = @{}
@@ -22,7 +35,15 @@ function Get-DotEnv {
   return $map
 }
 
+<#*
+  Mask-Privacy
+  メールや電話番号のような文字列を伏せ字にする。
+  引数 : Text (string)
+  戻り値 : 伏せ字化した文字列
+*#>
 function Mask-Privacy {
+  # メールアドレスや電話番号を *** に置換する
+  # Redacts emails/電話番号などのプライバシー情報
   param([string]$Text)
   if (-not $Text) { return $Text }
   $t = $Text
@@ -31,7 +52,16 @@ function Mask-Privacy {
   return $t
 }
 
+<#*
+  Get-SideJobPlan
+  週末のどちらの日に日雇いをするかを乱数で決め、学校行事の揺らぎも表現する。
+  引数 : D (DateTime)
+  戻り値 : object {SchoolEventOnSaturday, PlannedSideJobDay, IsTodaySideJob}
+*#>
 function Get-SideJobPlan {
+  # 土日のどちらで日雇いするかをランダム決定。
+  # 土曜に学校イベントがあると仮定したら自動で日曜バイトに寄せる。
+  # Randomly decides which weekend day is used for the side job
   param([datetime]$D)
   $rand = [System.Random]::new()
   $day = $D.DayOfWeek
@@ -58,6 +88,8 @@ function Get-SideJobPlan {
   }
 }
 
+# ====== 生成先のパスなどを初期化 ======
+# プロジェクトルートや生成先ディレクトリを決める
 $root = Split-Path -Parent $PSScriptRoot
 $rel  = $Date.ToString('yyyy/MM/dd')
 $dir  = Join-Path $root (Join-Path 'content/posts' $rel)
@@ -87,6 +119,8 @@ $thanks       = ''
 $tomorrow     = ''
 
 if ($UseAI) {
+  # AIを使う場合。OpenAI Chat Completions に JSON 形式で依頼する。
+  # ==== OpenAI で本文を生成するパート ====
   $dotenv = Get-DotEnv (Join-Path $root '.env')
   if (-not $env:OPENAI_API_KEY -and $dotenv['OPENAI_API_KEY']) {
     $env:OPENAI_API_KEY = $dotenv['OPENAI_API_KEY']
@@ -111,7 +145,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
 句読点と改行は自然に。絵文字・顔文字は使わない。
 "@
 
-      $plan = Get-SideJobPlan -D $Date
+      $plan = Get-SideJobPlan -D $Date   # 週末バイトの乱数ロジック
       $school = if ($plan.SchoolEventOnSaturday) { 'あり' } else { 'なし' }
       $pday = switch ($plan.PlannedSideJobDay) {
         'Saturday' { '土曜' }
@@ -170,6 +204,8 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
 }
 
 if (-not $quip) {
+  # フォールバック：テンプレを使って極簡単な本文を埋める
+  # AI が使えないときはテンプレ作文で埋める
   $quips = @(
     '靴下が左右で違っても、満員電車は気づかない。',
     '在宅だとコーヒーの消費量が指数関数。',
@@ -257,4 +293,3 @@ $(Mask-Privacy $hobby)
 $content = $frontMatter + "`n`n" + $body
 Set-Content -Encoding UTF8 -Path $path -Value $content
 Write-Host "Created: $path" -ForegroundColor Green
-

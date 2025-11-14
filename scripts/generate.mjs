@@ -1,9 +1,20 @@
+/**
+ * GitHub Actions 用: Ponjiro の日記を AI / Pexels 付きで生成するスクリプト。
+ * node scripts/generate.mjs
+ */
 import { mkdir, writeFile, access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
+/**
+ * formatTokyoParts
+ * JSTの年月日を2桁で返し、/content/posts/YYYY/MM/DD/ のディレクトリを決める。
+ * @param {Date} date
+ * @returns {{yyyy:string, mm:string, dd:string}}
+ */
 function formatTokyoParts(date = new Date()) {
+  // 投稿ディレクトリ作成用に JST ベースの日付パーツを返す（/content/posts/YYYY/MM/DD）
   const fmt = new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
     year: 'numeric',
@@ -17,7 +28,15 @@ function formatTokyoParts(date = new Date()) {
   return { yyyy, mm, dd }
 }
 
+/**
+ * maskPrivacy
+ * メールアドレスや電話番号っぽい文字列を伏せ字にする。
+ * @param {string|number|null|undefined} text
+ * @returns {string}
+ */
 function maskPrivacy(text) {
+  // 生成文中のメール・電話らしき文字列をぼかす
+  // （CI上で投稿前に最低限のプライバシーケア）
   if (text === null || text === undefined) return ''
   const s = String(text)
   return s
@@ -25,11 +44,25 @@ function maskPrivacy(text) {
     .replace(/\+?\d[\d\-\s]{8,}\d/g, '***-****-****')
 }
 
+/**
+ * fileExists
+ * 非同期でファイルの存在を確認
+ * @param {string} p
+ * @returns {Promise<boolean>}
+ */
 async function fileExists(p) {
   try { await access(p, constants.F_OK); return true } catch { return false }
 }
 
+/**
+ * decideSideJobPlan
+ * 週末の日雇いバイトの予定日（学校行事の揺らぎ込み）を決める。
+ * @param {Date} tzNow
+ * @returns {{schoolJP:string, pdayJP:string, todaySJJP:string}}
+ */
 function decideSideJobPlan(tzNow = new Date()) {
+  // 土日のどちらで日雇いをするか（学校行事の揺らぎ含む）を毎回決定
+  // GitHub Actions 側では毎回実行時刻が異なるので、当日の pending 作業を決める
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long' })
   const day = fmt.format(tzNow) // 'Saturday' / 'Sunday' / ...
   const rnd = Math.random()
@@ -49,6 +82,10 @@ function decideSideJobPlan(tzNow = new Date()) {
   return { schoolJP, pdayJP, todaySJJP }
 }
 
+/**
+ * main
+ * GitHub Actions 上で 1 日分の markdown + cover.jpg を生成するメイン処理
+ */
 async function main() {
   const repoRoot = process.cwd()
   const { yyyy, mm, dd } = formatTokyoParts()
@@ -59,6 +96,7 @@ async function main() {
   const slug = `${yyyy}-${mm}-${dd}`
   const absFile = path.join(absDir, `${slug}.md`)
   if (await fileExists(absFile)) {
+    // 同じ日付が存在するなら何もしない（重複生成防止）
     console.log(`Already exists: ${absFile}`)
     return
   }
@@ -90,6 +128,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
   if (apiKey) {
+    // ===== OpenAI で本文生成 =====
     try {
       const body = {
         model,
@@ -136,6 +175,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
   }
 
   if (!quip) {
+    // AI 生成が失敗した場合のフォールバック
     const quips = [
       '靴下が左右で違っても、満員電車は気づかない。',
       '在宅だとコーヒーの消費量が指数関数。',
@@ -156,7 +196,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
     tomorrow = ''
   }
 
-  // Pexels cover image
+  // ==== Pexels cover image ====
   let coverRel = null
   const pexKey = process.env.PEXELS_API_KEY
   if (pexKey) {
@@ -204,6 +244,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
   fmLines.push('+++')
   const frontMatter = fmLines.join('\n')
 
+  // 最終的な Markdown を構築
   const body =
 `今日のひとこと: ${maskPrivacy(quip)}
 
