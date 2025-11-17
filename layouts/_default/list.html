@@ -20,11 +20,19 @@
         <article class="post-card">
           {{- $thumb := "" }}
           {{- with .Params.cover.image }}
-            {{- $thumb = . }}
+            {{- $clean := replaceRE "^/" "" . }}
+            {{- if fileExists (printf "static/%s" $clean) }}
+              {{- $thumb = $clean | relURL }}
+            {{- else if site.Params.defaultOgImage }}
+              {{- $thumb = site.Params.defaultOgImage | relURL }}
+            {{- end }}
+          {{- end }}
+          {{- if and (eq $thumb "") site.Params.defaultOgImage }}
+            {{- $thumb = site.Params.defaultOgImage | relURL }}
           {{- end }}
           <a class="post-card__thumb" href="{{ .RelPermalink }}">
             {{- if $thumb }}
-              <img src="{{ $thumb | absURL }}" alt="{{ .Title }}" loading="lazy">
+              <img src="{{ $thumb }}" alt="{{ .Title }}" loading="lazy">
             {{- end }}
           </a>
           <div class="post-card__body">

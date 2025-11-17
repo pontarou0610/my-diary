@@ -16,9 +16,21 @@
       </p>
     </header>
 
-    {{ with .Params.cover.image }}
-      <img src="{{ . | absURL }}" alt="{{ $.Params.cover.alt }}" loading="lazy">
-    {{ end }}
+    {{- $hero := "" }}
+    {{- with .Params.cover.image }}
+      {{- $clean := replaceRE "^/" "" . }}
+      {{- if fileExists (printf "static/%s" $clean) }}
+        {{- $hero = $clean | relURL }}
+      {{- else if site.Params.defaultOgImage }}
+        {{- $hero = site.Params.defaultOgImage | relURL }}
+      {{- end }}
+    {{- end }}
+    {{- if and (eq $hero "") site.Params.defaultOgImage }}
+      {{- $hero = site.Params.defaultOgImage | relURL }}
+    {{- end }}
+    {{- if $hero }}
+      <img src="{{ $hero }}" alt="{{ $.Params.cover.alt }}" loading="lazy">
+    {{- end }}
 
     {{- if (.Param "ShowToc") }}
       {{ partial "toc.html" . }}

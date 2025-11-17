@@ -10,6 +10,7 @@ enableRobotsTXT = true
 [params]
   author = "ぽん次郎"
   description = "都内在住の40代会社員・3児の父。仕事・お金・子育て・趣味をゆるく綴る日記。"
+  defaultOgImage = "/img/placeholder.svg"
   defaultTheme = "auto"
   ShowReadingTime = true
   ShowShareButtons = true
