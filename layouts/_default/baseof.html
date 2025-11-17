@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    {{- partial "head.html" . }}
+    {{/* === SEO meta & structured data === */}}
+    {{- $desc := "" -}}
+    {{- if .Description }}
+      {{- $desc = .Description | plainify -}}
+    {{- else if .IsPage }}
+      {{- $desc = .Summary | plainify | truncate 160 -}}
+    {{- else }}
+      {{- $desc = site.Params.siteDescription | default site.Params.description -}}
+    {{- end }}
+    {{- $image := "" -}}
+    {{- with .Params.cover.image }}{{ $image = . }}{{ end -}}
+    {{- if and (not $image) .Params.images }}{{ $image = index .Params.images 0 }}{{ end -}}
+    {{- if not $image }}{{ $image = site.Params.defaultOgImage }}{{ end -}}
+    <meta name="description" content="{{ $desc }}">
+    <link rel="canonical" href="{{ .Permalink }}">
+    {{- with .PrevInSection }}<link rel="prev" href="{{ .Permalink }}">{{ end -}}
+    {{- with .NextInSection }}<link rel="next" href="{{ .Permalink }}">{{ end -}}
+    <meta property="og:type" content="{{ if .IsHome }}website{{ else }}article{{ end }}">
+    <meta property="og:title" content="{{ .Title }}">
+    <meta property="og:description" content="{{ $desc }}">
+    <meta property="og:url" content="{{ .Permalink }}">
+    <meta property="og:image" content="{{ $image | absURL }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ .Title }}">
+    <meta name="twitter:description" content="{{ $desc }}">
+    <meta name="twitter:image" content="{{ $image | absURL }}">
+    {{- if .IsPage }}
+      <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Article",
+          "headline": {{ .Title | jsonify }},
+          "datePublished": "{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}",
+          "dateModified": "{{ .Lastmod.Format "2006-01-02T15:04:05Z07:00" }}",
+          "mainEntityOfPage": {"@type": "WebPage","@id": "{{ .Permalink }}"},
+          "image": {{ $image | absURL | jsonify }},
+          "author": {"@type": "Person","name": {{ site.Params.author | default site.Title | jsonify }}},
+          "publisher": {
+            "@type": "Organization",
+            "name": {{ site.Title | jsonify }},
+            "logo": {"@type": "ImageObject","url": {{ (site.Params.defaultOgImage | default $image) | absURL | jsonify }}}
+          },
+          "description": {{ $desc | jsonify }}
+        }
+      </script>
+      {{- $crumbs := slice (dict "name" site.Title "url" site.BaseURL) -}}
+      {{- range .Ancestors.Reverse }}
+        {{- $crumbs = $crumbs | append (dict "name" .Title "url" .Permalink) -}}
+      {{- end }}
+      {{- $crumbs = $crumbs | append (dict "name" .Title "url" .Permalink) -}}
+      <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {{- range $i, $c := $crumbs -}}
+              {{- if gt $i 0 }},{{ end }}
+              {"@type":"ListItem","position":{{ add $i 1 }},"name":{{ $c.name | jsonify }},"item":{{ $c.url | jsonify }}}
+            {{- end }}
+          ]
+        }
+      </script>
+    {{- end }}
+    <style>
+      :root {
+        --accent: #ff6b3d;
+        --accent-strong: #ff5a1f;
+        --bg: #f8fafc;
+        --fg: #161b26;
+        --card: #ffffff;
+        --border: #e6eaf0;
+        --shadow: 0 14px 36px rgba(0, 0, 0, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+        background: radial-gradient(circle at 20% 20%, #fff3eb, #f8fafc 38%, #f4f6fb 70%);
+        color: #1f2937; /* デフォルト文字色を濃くする */
+        line-height: 1.8;
+      }
+      .post,
+      .page-card {
+        color: #111827; /* 本文をより濃く */
+      }
+      h1, h2, h3, h4, h5, h6 {
+        color: #0f172a; /* 見出しを濃く */
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { color: var(--accent-strong); }
+      header {
+        padding: 1.5rem 1rem 1.25rem;
+        background: linear-gradient(135deg, #111828 0%, #1f2435 30%, #0d6efd 100%);
+        color: #f9fbff;
+        box-shadow: var(--shadow);
+      }
+      .container {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 0 1.25rem;
+      }
+      .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+      }
+      .hero__title {
+        margin: 0;
+        font-size: clamp(1.25rem, 3vw, 1.7rem);
+        letter-spacing: 0.01em;
+      }
+      .hero__desc {
+        margin: 0;
+        color: rgba(255,255,255,0.85);
+        font-size: 0.98rem;
+      }
+      /* 本文の文字色を強める */
+      .post,
+      .page-card,
+      .post-content,
+      .post-content p,
+      .post-content li,
+      .post-content strong,
+      .post-content em,
+      .post__meta,
+      .post__meta span {
+        color: #111827;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        color: #0f172a;
+      }
+      .site-nav {
+        margin-top: 0.5rem;
+        display: inline-flex;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+      }
+      .site-nav a {
+        padding: 0.45rem 0.95rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255,255,255,0.12);
+        color: #fff;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+      }
+      .site-nav a:hover {
+        background: rgba(255, 255, 255, 0.22);
+      }
+      main {
+        max-width: 1140px;
+        margin: 0 auto;
+        padding: 2.5rem 1rem 4rem;
+      }
+      .page-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        padding: 2rem 2.2rem;
+      }
+      .post img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 1.5rem auto 0.75rem;
+        border-radius: 12px;
+      }
+      /* タイトルブロックとTOCの背景を白で統一 */
+      .post-header {
+        background: #fff;
+        padding: 0.5rem 0 1rem;
+      }
+      .post-title,
+      .post__meta {
+        background: #fff;
+      }
+      .toc {
+        background: #2f3035;
+        border-color: #e6eaf0;
+        color: #f5f7fb;
+      }
+      .post p > img {
+        margin-top: 1.5rem;
+      }
+      .post small {
+        display: block;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #6a7385;
+        margin-bottom: 1.5rem;
+      }
+      .toc {
+        border: 1px solid var(--border);
+        padding: 1rem;
+        border-radius: 12px;
+        background: #2f3035;
+        box-shadow: var(--shadow);
+        color: #f5f7fb;
+      }
+      .toc summary,
+      .toc .details,
+      .toc a {
+        color: #f5f7fb;
+      }
+      .toc a:hover {
+        color: var(--accent-strong);
+      }
+      /* ヒーロー風タイトル帯 */
+      .post-hero {
+        background: linear-gradient(135deg, #123468 0%, #0b49b1 50%, #0069ff 100%);
+        color: #f5f7fb;
+        padding: 2rem 2.4rem;
+        border-radius: 14px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+        margin-bottom: 1.5rem;
+      }
+      .post-hero__subtitle {
+        margin: 0 0 0.6rem;
+        font-size: 1.05rem;
+        opacity: 0.9;
+        color: #f5f7fb;
+      }
+      .post-hero__title {
+        margin: 0 0 0.8rem;
+        font-size: clamp(1.6rem, 3vw, 2.2rem);
+        font-weight: 800;
+        line-height: 1.35;
+        color: #f5f7fb;
+      }
+      .post-hero__meta {
+        margin: 0;
+        font-size: 0.95rem;
+        opacity: 0.92;
+        color: #f5f7fb;
+      }
+      .toc ul {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+      }
+      .toc li {
+        margin: 0.4rem 0;
+      }
+      .post-list {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        margin-top: 2rem;
+      }
+      .post-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 340px;
+        box-shadow: var(--shadow);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .post-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.12);
+      }
+      .post-card__thumb {
+        display: block;
+        width: 100%;
+        height: 180px;
+        background: linear-gradient(145deg, #fce7da, #f6f9ff);
+        overflow: hidden;
+      }
+      .post-card__thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .post-card__body {
+        padding: 1.4rem 1.5rem 1.3rem;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+      .post-card__meta {
+        margin: 0 0 0.35rem;
+        font-size: 0.86rem;
+        color: #6a7385;
+      }
+      .post-card__title {
+        margin: 0 0 0.6rem;
+        font-size: 1.05rem;
+      }
+      .post-card__title a {
+        color: #111827;
+      }
+      .post-card__excerpt {
+        margin: 0 0 0.9rem;
+        font-size: 0.94rem;
+        color: #4b5563;
+      }
+      .post-card__more {
+        margin-top: auto;
+        align-self: flex-start;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+      .share-buttons {
+        margin: 2rem 0 0;
+        padding: 1rem 1.25rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+      footer {
+        padding: 1.5rem 1rem 2rem;
+        text-align: center;
+        background: #0f1729;
+        color: rgba(255,255,255,0.8);
+        margin-top: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="container hero">
+        <div>
+          <h1 class="hero__title">
+            <a href="{{ .Site.BaseURL }}" style="color:#fff; text-decoration:none;">
+              {{ .Site.Title }}
+            </a>
+          </h1>
+          <p class="hero__desc">
+            {{ with .Site.Params.siteDescription }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}
+          </p>
+        </div>
+        <nav class="site-nav">
+          <a href="{{ .Site.BaseURL }}">Home</a>
+          {{- with site.Menus.main }}
+            {{- range . }}
+              <a href="{{ .URL | absURL }}">{{ .Name }}</a>
+            {{- end }}
+          {{- end }}
+        </nav>
+      </div>
+    </header>
+    <main>
+      <div class="page-card">
+        {{ block "main" . }}{{ end }}
+      </div>
+    </main>
+    <footer>
+      <small>© {{ now.Format "2006" }} {{ .Site.Title }} / Powered by Hugo &amp; GitHub Pages</small>
+    </footer>
+  </body>
+</html>

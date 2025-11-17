@@ -1,7 +1,5 @@
-{{- $pageurl := .Permalink -}}
+{{- $shareURL := .Permalink -}}            {{/* 生URLのまま（ブラウザが1回だけエンコード） */}}
 {{- $title := .Title | plainify -}}
-{{- $encodedURL := urlquery $pageurl -}}
-{{- $encodedTitle := urlquery $title -}}
 
 {{- $.Scratch.Set "tags" "" -}}
 {{- with .Params.Tags -}}
@@ -18,7 +16,7 @@
   {{- if (in $ShareButtons "x") }}
   <li>
     <a target="_blank" rel="noopener noreferrer" aria-label="Xでシェア: {{ $title }}"
-      href="https://x.com/intent/tweet/?text={{ $encodedTitle }}&amp;url={{ $encodedURL }}{{ if $hashtags }}&amp;hashtags={{ $hashtags }}{{ end }}">
+      href="https://x.com/intent/post?text={{ $title }}&amp;url={{ $shareURL }}{{ if $hashtags }}&amp;hashtags={{ $hashtags }}{{ end }}">
       <svg version="1.1" viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
         <path
           d="M512 62.554V449.446C512 483.97 483.97 512 449.446 512H62.554C28.03 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446C483.971 0 512 28.03 512 62.554ZM269.951 190.75L182.567 75.216H56L207.216 272.95 63.9 436.783H125.266L235.9 310.383 332.567 436.783H456L298.367 228.367 432.367 75.216H371.033Z" />
@@ -31,7 +29,7 @@
   {{- if (in $ShareButtons "line") }}
   <li>
     <a target="_blank" rel="noopener noreferrer" aria-label="LINEでシェア: {{ $title }}"
-      href="https://social-plugins.line.me/lineit/share?url={{ $encodedURL }}&amp;text={{ $encodedTitle }}">
+      href="https://social-plugins.line.me/lineit/share?url={{ $shareURL }}&amp;text={{ $title }}">
       <svg viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
         <path
           d="M80 64h352c26.5 0 48 21.5 48 48v208c0 26.5-21.5 48-48 48H288l-32 80-32-80H80c-26.5 0-48-21.5-48-48V112c0-26.5 21.5-48 48-48Z" />
@@ -44,7 +42,7 @@
   {{- if (in $ShareButtons "facebook") }}
   <li>
     <a target="_blank" rel="noopener noreferrer" aria-label="Facebookでシェア: {{ $title }}"
-      href="https://www.facebook.com/sharer/sharer.php?u={{ $encodedURL }}">
+      href="https://www.facebook.com/sharer/sharer.php?u={{ $shareURL }}">
       <svg version="1.1" viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
         <path
           d="M449.446 0C483.971 0 512 28.03 512 62.554V449.446C512 483.971 483.97 512 449.446 512H62.554C28.029 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446ZM335 176h-48c-9.941 0-18 8.059-18 18v46h66l-10 64h-56v160h-64V304h-48v-64h48v-56c0-39.701 32.299-72 72-72h58v64Z" />
@@ -57,7 +55,7 @@
   {{- if (in $ShareButtons "hatena") }}
   <li>
     <a target="_blank" rel="noopener noreferrer" aria-label="はてなブックマークに追加: {{ $title }}"
-      href="https://b.hatena.ne.jp/add?mode=confirm&amp;url={{ $encodedURL }}&amp;title={{ $encodedTitle }}">
+      href="https://b.hatena.ne.jp/add?mode=confirm&amp;url={{ $shareURL }}&amp;title={{ $title }}">
       <svg viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
         <path
           d="M449.446 0C483.971 0 512 28.03 512 62.554V449.446C512 483.971 483.97 512 449.446 512H62.554C28.029 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446ZM176 128v256h64v-88h64v88h64V128h-64v96h-64v-96h-64Zm224 224c0 35.346-28.654 64-64 64s-64-28.654-64-64 28.654-64 64-64 64 28.654 64 64Z" />

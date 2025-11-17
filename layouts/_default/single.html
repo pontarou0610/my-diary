@@ -1,0 +1,76 @@
+{{ define "main" }}
+  <article class="post">
+    <header class="post-hero">
+      {{- if .Params.series }}
+        <p class="post-hero__subtitle">{{ .Params.series }}</p>
+      {{- end }}
+      <h1 class="post-hero__title">{{ .Title }}</h1>
+      <p class="post-hero__meta">
+        Published: {{ .Date.Format "2006-01-02 15:04" }}
+        {{- with .Params.tags }}
+          / Tags:
+          {{- range $i, $t := . }}
+            #{{ $t }}{{ if lt (add $i 1) (len $.Params.tags) }}, {{ end }}
+          {{- end }}
+        {{- end }}
+      </p>
+    </header>
+
+    {{ with .Params.cover.image }}
+      <img src="{{ . | absURL }}" alt="{{ $.Params.cover.alt }}" loading="lazy">
+    {{ end }}
+
+    {{- if (.Param "ShowToc") }}
+      {{ partial "toc.html" . }}
+    {{- end }}
+
+    <div class="post-content">
+      {{ .Content }}
+    </div>
+
+    <footer class="share-buttons">
+      {{- if (and site.Params.ShowShareButtons (ne .Params.disableShare true)) }}
+        {{ partial "share_icons.html" . }}
+      {{- end }}
+    </footer>
+
+    {{/* 前後の記事リンク */}}
+    <section class="post-nav">
+      <h2>前後の記事</h2>
+      <ul>
+        {{- with .PrevInSection }}
+          <li>← <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+        {{- end }}
+        {{- with .NextInSection }}
+          <li>→ <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+        {{- end }}
+      </ul>
+    </section>
+
+    {{/* 関連記事（タグが重なるものから最大3件） */}}
+    {{- $related := where (where site.RegularPages "Permalink" "ne" .Permalink) "Params.tags" "intersect" .Params.tags }}
+    {{- if gt (len $related) 0 }}
+      <section class="post-related">
+        <h2>関連記事</h2>
+        <ul>
+          {{- range first 3 $related }}
+            <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+          {{- end }}
+        </ul>
+      </section>
+    {{- end }}
+
+    {{/* 人気記事（データがないので最新3件を代替表示） */}}
+    {{- $popular := first 3 (where site.RegularPages.ByDate.Reverse "Permalink" "ne" .Permalink) }}
+    {{- if gt (len $popular) 0 }}
+      <section class="post-popular">
+        <h2>人気記事</h2>
+        <ul>
+          {{- range $popular }}
+            <li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+          {{- end }}
+        </ul>
+      </section>
+    {{- end }}
+  </article>
+{{ end }}
