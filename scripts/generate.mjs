@@ -234,8 +234,11 @@ JSON だけを出力する。`
           const imgResp = await fetch(src, { headers: { Authorization: pexKey } })
           if (imgResp.ok) {
             const buf = Buffer.from(await imgResp.arrayBuffer())
-            coverRel = 'cover.jpg'
-            await writeFile(path.join(absDir, coverRel), buf)
+            // 静的ディレクトリに cover.jpg を配置（GH Pages で確実に配信するため）
+            coverRel = `/posts/${yyyy}/${mm}/${dd}/cover.jpg`
+            const staticDir = path.join(repoRoot, 'static', 'posts', yyyy, mm, dd)
+            await mkdir(staticDir, { recursive: true })
+            await writeFile(path.join(staticDir, 'cover.jpg'), buf)
           }
         }
       }
@@ -257,7 +260,6 @@ JSON だけを出力する。`
     fmLines.push('[cover]')
     fmLines.push(`  image = "${coverRel}"`)
     fmLines.push(`  alt = "${alt}"`)
-    fmLines.push('  relative = true')
   }
   fmLines.push('+++')
   const frontMatter = fmLines.join('\n')
