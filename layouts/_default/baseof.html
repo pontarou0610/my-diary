@@ -2,6 +2,14 @@
 <html lang="ja">
   <head>
     {{- partial "head.html" . }}
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-HYSKQE2EV1"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-HYSKQE2EV1');
+    </script>
     {{/* === SEO meta & structured data === */}}
     {{- $desc := "" -}}
     {{- if .Description }}
