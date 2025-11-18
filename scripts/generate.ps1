@@ -1,9 +1,9 @@
 <#*
   Ponjiro の日記を生成する PowerShell スクリプト
-  主にローカル実行向け。GitHub Actions は scripts/generate.mjs を使用。
+  ローカル実行向け（CI は scripts/generate.mjs を使用）
 
   Usage:
-    pwsh scripts/generate.ps1 [-Date yyyy-mm-dd] [-Publish] [-UseAI] [-Model gpt-4o-mini]
+    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-4o-mini]
 *#>
 param(
   [datetime]$Date = (Get-Date),
@@ -29,7 +29,6 @@ function Get-DotEnv {
   return $map
 }
 
-# メール/電話番号らしき文字列を伏せ字にする
 function Protect-Privacy {
   param([string]$Text)
   if (-not $Text) { return $Text }
@@ -39,12 +38,8 @@ function Protect-Privacy {
   return $t
 }
 
-# 句点などの文末記号でのみ改行する
 function Format-ForMarkdown {
-  param(
-    [string]$Text,
-    [int]$Width = 38  # 幅は未使用だが互換のため残す
-  )
+  param([string]$Text)
   if (-not $Text) { return '' }
   $paras = ($Text -split "`r?`n" | ForEach-Object { $_.Trim() }) | Where-Object { $_ }
   $out = @()
@@ -65,12 +60,8 @@ function Format-ForMarkdown {
   return ($out -join "`n`n")
 }
 
-# タイトル用に日付と短いひとことを組み合わせる
 function Get-TitleFromQuip {
-  param(
-    [string]$DateString,
-    [string]$Quip
-  )
+  param([string]$DateString,[string]$Quip)
   $clean = (Protect-Privacy $Quip).Replace("`r",'').Replace("`n",' ').Trim()
   $clean = ($clean -replace '\s+',' ')
   if (-not $clean) { return "$DateString 日記" }
@@ -78,26 +69,19 @@ function Get-TitleFromQuip {
   return "$DateString 日記 - $snippet"
 }
 
-# 週末バイトの予定をざっくり決める（表示用だけ）
 function Get-SideJobPlan {
   param([datetime]$D)
   $rand = [System.Random]::new()
   $day = $D.DayOfWeek
   $schoolEventSat = $false
   $plannedDay = 'None'
-
   if ($day -eq [System.DayOfWeek]::Saturday -or $day -eq [System.DayOfWeek]::Sunday) {
     $schoolEventSat = ($rand.NextDouble() -lt 0.3)
-    if ($schoolEventSat) {
-      $plannedDay = 'Sunday'
-    } else {
-      $plannedDay = if ($rand.NextDouble() -lt 0.5) { 'Saturday' } else { 'Sunday' }
-    }
+    if ($schoolEventSat) { $plannedDay = 'Sunday' }
+    else { $plannedDay = if ($rand.NextDouble() -lt 0.5) { 'Saturday' } else { 'Sunday' } }
   }
-
   $isToday = ($day -eq [System.DayOfWeek]::Saturday -and $plannedDay -eq 'Saturday') -or
              ($day -eq [System.DayOfWeek]::Sunday   -and $plannedDay -eq 'Sunday')
-
   [pscustomobject]@{
     SchoolEventOnSaturday = $schoolEventSat
     PlannedSideJobDay     = $plannedDay
@@ -106,11 +90,7 @@ function Get-SideJobPlan {
 }
 
 function Get-PexelsQuery {
-  param(
-    [string]$Hobby,
-    [string]$Parenting,
-    [string]$Work
-  )
+  param([string]$Hobby,[string]$Parenting,[string]$Work)
   $extraTags = @('昼','夜','夕方','朝','雨','晴れ','リビング','カフェ','公園','街','家族')
   $extra = Get-Random -InputObject $extraTags
   $base = ("$Hobby $Parenting $Work").Trim()
@@ -119,23 +99,17 @@ function Get-PexelsQuery {
   return $q
 }
 
-# ===== パスなどを設定 =====
+# ===== パス設定 =====
 $root = Split-Path -Parent $PSScriptRoot
 $rel  = $Date.ToString('yyyy/MM/dd')
 $dir  = Join-Path $root (Join-Path 'content/posts' $rel)
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
-
 $slug = $Date.ToString('yyyy-MM-dd')
 $path = Join-Path $dir ("$slug.md")
-
-if (Test-Path $path) {
-  Write-Host "Already exists: $path" -ForegroundColor Yellow
-  exit 0
-}
-
+if (Test-Path $path) { Write-Host "Already exists: $path" -ForegroundColor Yellow; exit 0 }
 $draft = if ($Publish) { 'false' } else { 'true' }
 
-# プロンプト準備
+# プロンプト
 $plan = Get-SideJobPlan -D $Date
 $schoolJP = if ($plan.SchoolEventOnSaturday) { 'あり' } else { 'なし' }
 $pdayJP   = if ($plan.PlannedSideJobDay -eq 'Saturday') { '土曜' } elseif ($plan.PlannedSideJobDay -eq 'Sunday') { '日曜' } else { 'なし' }
@@ -166,32 +140,14 @@ Hugoブログ用に、以下のJSON schemaで出力する。
 JSON だけを出力する。
 文章トーンは野原ひろし風の口調で、家族への愛情をさりげなくにじませて。
 "@
-
 $user = '上記JSON schemaどおりに、JSON文字列だけで返してください。'
 
-# 初期値
-$quip         = $null
-$work         = $null
-$workLearning = $null
-$money        = $null
-$moneyTip     = $null
-$parenting    = $null
-$dadpt        = $null
-$hobby        = $null
-$mood         = $null
-$thanks       = $null
-$tomorrow     = $null
+$quip=$work=$workLearning=$money=$moneyTip=$parenting=$dadpt=$hobby=$mood=$thanks=$tomorrow=$null
 
 if ($UseAI) {
   $dotenv = Get-DotEnv (Join-Path $root '.env')
-  if (-not $env:OPENAI_API_KEY -and $dotenv['OPENAI_API_KEY']) {
-    $env:OPENAI_API_KEY = $dotenv['OPENAI_API_KEY']
-  }
-  if (-not $Model) {
-    $Model = $env:OPENAI_MODEL
-    if (-not $Model) { $Model = 'gpt-4o-mini' }
-  }
-
+  if (-not $env:OPENAI_API_KEY -and $dotenv['OPENAI_API_KEY']) { $env:OPENAI_API_KEY = $dotenv['OPENAI_API_KEY'] }
+  if (-not $Model) { $Model = $env:OPENAI_MODEL; if (-not $Model) { $Model = 'gpt-4o-mini' } }
   if ($env:OPENAI_API_KEY) {
     try {
       $bodyObj = [pscustomobject]@{
@@ -204,17 +160,13 @@ if ($UseAI) {
           @{ role = 'user'  ; content = $user }
         )
       }
-
       $bodyJson = $bodyObj | ConvertTo-Json -Depth 6
-
       $resp = Invoke-RestMethod -Method Post -Uri 'https://api.openai.com/v1/chat/completions' `
         -Headers @{ Authorization = "Bearer $($env:OPENAI_API_KEY)"; 'Content-Type' = 'application/json' } `
         -Body $bodyJson -TimeoutSec 60
-
       $txt  = $resp.choices[0].message.content
       $json = $null
       try { $json = $txt | ConvertFrom-Json -ErrorAction Stop } catch {}
-
       if ($json) {
         $quip         = $json.quip
         $work         = $json.work
@@ -247,12 +199,11 @@ if (-not $quip) {
   $quip = Get-Random -InputObject $quips
 }
 
-# Pexels からカバー画像取得（任意）＋ランダム要素
 $coverRelative = $null
 if ($env:PEXELS_API_KEY) {
   try {
     $q = Get-PexelsQuery -Hobby $hobby -Parenting $parenting -Work $work
-    $page = Get-Random -Minimum 1 -Maximum 6  # 1..5
+    $page = Get-Random -Minimum 1 -Maximum 6
     $perPage = 15
     Add-Type -AssemblyName System.Web
     $uri = 'https://api.pexels.com/v1/search?per_page={0}&page={1}&orientation=landscape&query={2}' -f `
