@@ -1,6 +1,6 @@
 <#*
   Ponjiro の日記を生成する PowerShell スクリプト
-  主にローカル実行向け。GitHub Actions では scripts/generate.mjs を使用。
+  主にローカル実行向け。GitHub Actions は scripts/generate.mjs を使用。
 
   Usage:
     pwsh scripts/generate.ps1 [-Date yyyy-mm-dd] [-Publish] [-UseAI] [-Model gpt-4o-mini]
@@ -103,6 +103,20 @@ function Get-SideJobPlan {
     PlannedSideJobDay     = $plannedDay
     IsTodaySideJob        = $isToday
   }
+}
+
+function Get-PexelsQuery {
+  param(
+    [string]$Hobby,
+    [string]$Parenting,
+    [string]$Work
+  )
+  $extraTags = @('昼','夜','夕方','朝','雨','晴れ','リビング','カフェ','公園','街','家族')
+  $extra = Get-Random -InputObject $extraTags
+  $base = ("$Hobby $Parenting $Work").Trim()
+  $q = ("$base $extra").Trim()
+  if (-not $q) { $q = '東京 日常 家庭' }
+  return $q
 }
 
 # ===== パスなどを設定 =====
@@ -233,18 +247,19 @@ if (-not $quip) {
   $quip = Get-Random -InputObject $quips
 }
 
-# Pexels からカバー画像取得（任意）
+# Pexels からカバー画像取得（任意）＋ランダム要素
 $coverRelative = $null
 if ($env:PEXELS_API_KEY) {
   try {
-    $q = ($hobby + ' ' + $parenting + ' ' + $work)
-    if (-not $q -or $q.Trim().Length -lt 2) { $q = '東京 日常 家庭 夕方' }
+    $q = Get-PexelsQuery -Hobby $hobby -Parenting $parenting -Work $work
+    $page = Get-Random -Minimum 1 -Maximum 6  # 1..5
+    $perPage = 15
     Add-Type -AssemblyName System.Web
-    $uri = 'https://api.pexels.com/v1/search?per_page=1&orientation=landscape&query=' +
-           [System.Web.HttpUtility]::UrlEncode($q)
+    $uri = 'https://api.pexels.com/v1/search?per_page={0}&page={1}&orientation=landscape&query={2}' -f `
+           $perPage, $page, [System.Web.HttpUtility]::UrlEncode($q)
     $headers = @{ Authorization = $env:PEXELS_API_KEY }
     $pex = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -TimeoutSec 30
-    $photo = $pex.photos | Select-Object -First 1
+    $photo = $pex.photos | Get-Random -Count 1
     if ($photo -and $photo.src) {
       $imgUrl = $photo.src.large2x
       if (-not $imgUrl) { $imgUrl = $photo.src.large }

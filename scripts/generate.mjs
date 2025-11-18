@@ -79,6 +79,14 @@ function pickTitle(yyyy, mm, dd, quip) {
   return `${base} - ${snippet}`
 }
 
+function buildPexelsQuery(hobby, parenting, work) {
+  const extraTags = ['昼', '夜', '夕方', '朝', '雨', '晴れ', 'リビング', 'カフェ', '公園', '街', '家族']
+  const extra = extraTags[Math.floor(Math.random() * extraTags.length)]
+  const base = `${hobby || ''} ${parenting || ''} ${work || ''}`.trim()
+  const query = `${base} ${extra}`.trim()
+  return query || '東京 日常 家庭'
+}
+
 async function main() {
   const repoRoot = process.cwd()
   const { yyyy, mm, dd } = formatTokyoParts()
@@ -210,16 +218,15 @@ JSON だけを出力する。
   const pexKey = process.env.PEXELS_API_KEY
   if (pexKey) {
     try {
-      const query =
-        (hobby || '') + ' ' +
-        (parenting || '') + ' ' +
-        (work || '') ||
-        '東京 日常 家庭 夕方'
-      const url = `https://api.pexels.com/v1/search?per_page=1&orientation=landscape&query=${encodeURIComponent(query)}`
+      const query = buildPexelsQuery(hobby, parenting, work)
+      const page = Math.floor(Math.random() * 5) + 1 // 1〜5ページのいずれか
+      const perPage = 15
+      const url = `https://api.pexels.com/v1/search?per_page=${perPage}&page=${page}&orientation=landscape&query=${encodeURIComponent(query)}`
       const resp = await fetch(url, { headers: { Authorization: pexKey } })
       if (resp.ok) {
         const data = await resp.json()
-        const photo = data.photos?.[0]
+        const photos = data.photos || []
+        const photo = photos.length ? photos[Math.floor(Math.random() * photos.length)] : null
         const src = photo?.src?.large2x || photo?.src?.large || photo?.src?.landscape
         if (src) {
           const imgResp = await fetch(src, { headers: { Authorization: pexKey } })
