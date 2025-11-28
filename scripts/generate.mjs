@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Ponjiro の日記を AI / Pexels 付きで生成するスクリプト
  * node scripts/generate.mjs
  */
@@ -7,7 +7,6 @@ import { constants } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
-// JST の日付を取得してディレクトリ名を決める
 function formatTokyoParts(date = new Date()) {
   const fmt = new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -80,22 +79,22 @@ function nthWeekdayOfMonth(year, month, weekday, nth) {
 function buildHolidaySet(year) {
   const base = new Set()
   const add = (m, d) => base.add(toDateKey(year, m, d))
-  add(1, 1) // 元日
-  base.add(nthWeekdayOfMonth(year, 1, 1, 2)) // 成人の日 (2nd Monday)
-  add(2, 11) // 建国記念の日
-  add(2, 23) // 天皇誕生日
-  add(3, calcVernalEquinoxDay(year)) // 春分の日
-  add(4, 29) // 昭和の日
-  add(5, 3) // 憲法記念日
-  add(5, 4) // みどりの日
-  add(5, 5) // こどもの日
-  base.add(nthWeekdayOfMonth(year, 7, 1, 3)) // 海の日 (3rd Monday)
-  add(8, 11) // 山の日
-  base.add(nthWeekdayOfMonth(year, 9, 1, 3)) // 敬老の日 (3rd Monday)
-  add(9, calcAutumnEquinoxDay(year)) // 秋分の日
-  base.add(nthWeekdayOfMonth(year, 10, 1, 2)) // スポーツの日 (2nd Monday)
-  add(11, 3) // 文化の日
-  add(11, 23) // 勤労感謝の日
+  add(1, 1)
+  base.add(nthWeekdayOfMonth(year, 1, 1, 2))
+  add(2, 11)
+  add(2, 23)
+  add(3, calcVernalEquinoxDay(year))
+  add(4, 29)
+  add(5, 3)
+  add(5, 4)
+  add(5, 5)
+  base.add(nthWeekdayOfMonth(year, 7, 1, 3))
+  add(8, 11)
+  base.add(nthWeekdayOfMonth(year, 9, 1, 3))
+  add(9, calcAutumnEquinoxDay(year))
+  base.add(nthWeekdayOfMonth(year, 10, 1, 2))
+  add(11, 3)
+  add(11, 23)
 
   const holidays = new Set(base)
   const baseSorted = [...base].sort()
@@ -191,7 +190,6 @@ function describeDayInfo(parts, weekdayJP) {
   return { dateKey, utcDate, weekdayEn, weekdayJP, isWeekend, isHoliday, isWorkday, dayKindJP, focus, tone }
 }
 
-// メール・電話番号らしき文字を伏せ字にする
 function maskPrivacy(text) {
   if (text === null || text === undefined) return ''
   const s = String(text)
@@ -200,7 +198,6 @@ function maskPrivacy(text) {
     .replace(/\+?\d[\d\-\s]{8,}\d/g, '***-****-****')
 }
 
-// 句点などの文末記号でのみ改行する
 function wrapForMarkdown(text) {
   if (!text) return ''
   const paras = String(text).split(/\r?\n/).map(p => p.trim()).filter(Boolean)
@@ -226,7 +223,6 @@ async function fileExists(p) {
   try { await access(p, constants.F_OK); return true } catch { return false }
 }
 
-// サイドジョブの予定をざっくり決める（表示用だけ）
 function decideSideJobPlan(dayInfo = null, rng = Math.random) {
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long' })
   const day = dayInfo?.weekdayEn || fmt.format(new Date())
@@ -303,6 +299,8 @@ function buildOfflineDiary(dayInfo) {
     '朝ドラの展開',
     '音楽フェスのラインナップ'
   ]
+  if (dayInfo.dayKindJP === '祝日') trendTopics.push('祝日のイベント情報')
+  if (dayInfo.isWeekend) trendTopics.push('週末のレジャーネタ')
   const trendTopic = pickFrom(rng, trendTopics)
   const trend = pickFrom(rng, [
     `今日のトレンド（${trendTopic}）を眺める。家族の会話ネタに温存。`,
@@ -422,3 +420,211 @@ function buildOfflineDiary(dayInfo) {
 
   return { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, mood: String(moodScore), thanks, tomorrow, trend }
 }
+
+async function main() {
+  const repoRoot = process.cwd()
+  const now = new Date()
+  const parts = formatTokyoParts(now)
+  const { yyyy, mm, dd } = parts
+  const weekdayJP = formatTokyoWeekdayJP(now)
+  const dayInfo = describeDayInfo(parts, weekdayJP)
+  const relDir = path.join('content', 'posts', yyyy, mm, dd)
+  const absDir = path.join(repoRoot, relDir)
+  await mkdir(absDir, { recursive: true })
+
+  const slug = `${yyyy}-${mm}-${dd}`
+  const absFile = path.join(absDir, `${slug}.md`)
+  if (await fileExists(absFile)) {
+    console.log(`Already exists: ${absFile}`)
+    return
+  }
+
+  const draft = 'false'
+  const sjRng = makeSeededRandom(seedFromDateKey(dayInfo.dateKey) ^ 0x13572468)
+  const { schoolJP, pdayJP, todaySJJP } = decideSideJobPlan(dayInfo, sjRng)
+
+  const sys = `
+あなたは40代の会社員「ぽん次郎」。SESで証券会社に常駐しているがフルリモート。
+妻はさっこ（専業主婦気質で浪費しがち）、子どもは3人（長男:聖太郎=高3で受験期・スーパーでバイト、長女:蓮子=高1で吹奏楽部・ファミレスでバイト、次男:連次郎丸=小5で不登校気味・Roblox好き）。
+趣味はスマホゲーム「機動戦士ガンダムUCエンゲージ」と、LINEマンガ/ピッコマの無料話を寝る前に読む程度。毎週どちらかの週末に日雇いのオフィス移転バイト。
+スタイル: 野原ひろし風の一人称「オレ」。庶民的でユーモラス、家族への愛情と弱音がちらつくが前向きに締める。
+前提:
+- 日付: ${yyyy}-${mm}-${dd}（${weekdayJP} / ${dayInfo.dayKindJP}）。本業: ${dayInfo.isWorkday ? '通常勤務あり' : '休み（本業ネタは控えめ）'}。
+- サイドジョブ予定: 学校行事 ${schoolJP}、日雇い予定日: ${pdayJP}、今日が日雇い当日: ${todaySJJP}。
+- 今日の切り口: 「${dayInfo.focus}」。トーンは${dayInfo.tone}寄りに揺らし、日替わり感を出す。
+- 土日祝日は本業は休み扱い。仕事セクションは控えめにし、家族/趣味/小仕事/休息を厚めに描く。
+- 平日は仕事の学びを具体に1つ深掘り。冒頭ひとことで天気/体調/予定を触れる。
+- 季節・天気・匂い・音・家事の手触りなど具体物を散らし、固有名詞や住所はぼかす。
+- 同じ書き出しや文末を避け、会話・内省・レビューなど表現パターンを交互に使ってマンネリを防ぐ。
+- 文字数: 本文トータルおおよそ2000〜2400文字。句点や読点で適度に改行し読みやすく。
+- その日のトレンド（ジャンル不問）への短い所感を1つ入れる。
+Hugoブログ用に、以下のJSON schemaで出力（目安は調整可）:
+{
+  "quip": "今日のひとこと。天気や体調、日雇い予定（学校行事: ${schoolJP}, 日雇い予定日: ${pdayJP}, 今日が日雇い当日: ${todaySJJP}）を絡める",
+  "work": "仕事。リモート勤務、会議、業務、仕事仲間とのやりとりなど。土日祝は本業控えめ",
+  "work_learning": "仕事からの学び。休みの日は次に試したいことでも可",
+  "money": "お金。家計、教育費、日用品、節約/買い物、バイト代の使い道など",
+  "money_tip": "お金に関する気づきやミニTips",
+  "parenting": "子育て。長男・長女・次男の様子や悩み、夫婦のやりとりも含めて",
+  "dad_points": "父親として意識したいこと",
+  "hobby": "趣味。ガンダムUCエンゲージ、漫画（LINEマンガ/ピッコマ）、音楽など",
+  "trend": "その日のトレンドへの一言所感（ニュース/ネット/買い物/地域などジャンル不問）",
+  "mood": "気分。0〜10で数値。整数",
+  "thanks": "感謝",
+  "tomorrow": "明日の一言"
+}
+JSONだけを出力する。文章トーンは野原ひろし風の口調で、家族への愛情をさりげなくにじませて。
+`
+  const userPrompt = '上記JSON schemaどおりに、JSONだけで返してください。'
+
+  let {
+    quip,
+    work,
+    workLearning,
+    money,
+    moneyTip,
+    parenting,
+    dadpt,
+    hobby,
+    trend,
+    mood,
+    thanks,
+    tomorrow
+  } = buildOfflineDiary(dayInfo)
+
+  const apiKey = process.env.OPENAI_API_KEY
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+
+  if (apiKey) {
+    try {
+      const body = {
+        model,
+        temperature: 0.8,
+        max_tokens: 1500,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: userPrompt }
+        ]
+      }
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      if (!resp.ok) throw new Error(`OpenAI HTTP ${resp.status}`)
+      const data = await resp.json()
+      const content = data.choices?.[0]?.message?.content
+      try {
+        const parsed = JSON.parse(content)
+        if (parsed.quip)         quip = parsed.quip
+        if (parsed.work)         work = parsed.work
+        if (parsed.work_learning) workLearning = parsed.work_learning
+        if (parsed.money)        money = parsed.money
+        if (parsed.money_tip)    moneyTip = parsed.money_tip
+        if (parsed.parenting)    parenting = parsed.parenting
+        if (parsed.dad_points)   dadpt = parsed.dad_points
+        if (parsed.hobby)        hobby = parsed.hobby
+        if (parsed.trend)        trend = parsed.trend
+        if (parsed.mood)         mood = parsed.mood
+        if (parsed.thanks)       thanks = parsed.thanks
+        if (parsed.tomorrow)     tomorrow = parsed.tomorrow
+      } catch {
+        console.warn('JSON parse failed for OpenAI content')
+      }
+    } catch (e) {
+      console.warn('OpenAI生成に失敗:', e.message)
+    }
+  } else {
+    console.warn('OPENAI_API_KEY 未設定。テンプレートを使用します。')
+  }
+
+  let coverRel = null
+  const pexKey = process.env.PEXELS_API_KEY
+  if (pexKey) {
+    try {
+      const query = buildPexelsQuery(hobby, parenting, work, dayInfo)
+      const page = Math.floor(Math.random() * 5) + 1
+      const perPage = 15
+      const url = `https://api.pexels.com/v1/search?per_page=${perPage}&page=${page}&orientation=landscape&query=${encodeURIComponent(query)}`
+      const resp = await fetch(url, { headers: { Authorization: pexKey } })
+      if (resp.ok) {
+        const data = await resp.json()
+        const photos = data.photos || []
+        const photo = photos.length ? photos[Math.floor(Math.random() * photos.length)] : null
+        const src = photo?.src?.large2x || photo?.src?.large || photo?.src?.landscape
+        if (src) {
+          const imgResp = await fetch(src, { headers: { Authorization: pexKey } })
+          if (imgResp.ok) {
+            const buf = Buffer.from(await imgResp.arrayBuffer())
+            coverRel = `/posts/${yyyy}/${mm}/${dd}/cover.jpg`
+            const staticDir = path.join(repoRoot, 'static', 'posts', yyyy, mm, dd)
+            await mkdir(staticDir, { recursive: true })
+            await writeFile(path.join(staticDir, 'cover.jpg'), buf)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Pexels取得に失敗:', e.message)
+    }
+  }
+
+  const title = pickTitle(yyyy, mm, dd, quip)
+  const fmLines = [
+    '+++',
+    `title = "${title}"`,
+    `date = ${yyyy}-${mm}-${dd}T22:00:00+09:00`,
+    `draft = ${draft}`,
+    'tags = ["日記", "仕事", "お金", "子育て", "趣味"]',
+    'categories = ["日常"]'
+  ]
+  if (coverRel) {
+    const alt = (quip || '').replace(/"/g, '\\"')
+    fmLines.push('[cover]')
+    fmLines.push(`  image = "${coverRel}"`)
+    fmLines.push(`  alt = "${alt}"`)
+  }
+  fmLines.push('+++')
+  const frontMatter = fmLines.join('\n')
+
+  const sections = {
+    work: `## 仕事\n\n${wrapForMarkdown(maskPrivacy(work))}\n\n{{< learn >}}\n${wrapForMarkdown(maskPrivacy(workLearning))}\n{{< /learn >}}`,
+    money: `## お金\n\n${wrapForMarkdown(maskPrivacy(money))}\n\n{{< tip >}}\n${wrapForMarkdown(maskPrivacy(moneyTip))}\n{{< /tip >}}`,
+    parenting: `## 子育て\n\n${wrapForMarkdown(maskPrivacy(parenting))}\n\n{{< dadpt >}}\n${wrapForMarkdown(maskPrivacy(dadpt))}\n{{< /dadpt >}}`,
+    hobby: `## 趣味\n\n${wrapForMarkdown(maskPrivacy(hobby))}`,
+    trend: `## トレンドひとこと\n\n${wrapForMarkdown(maskPrivacy(trend))}`
+  }
+
+  const patterns = dayInfo.isWorkday
+    ? [
+      ['work', 'money', 'parenting', 'hobby', 'trend'],
+      ['work', 'parenting', 'money', 'hobby', 'trend'],
+      ['work', 'trend', 'money', 'parenting', 'hobby']
+    ]
+    : [
+      ['parenting', 'work', 'money', 'hobby', 'trend'],
+      ['hobby', 'parenting', 'money', 'work', 'trend'],
+      ['trend', 'parenting', 'money', 'hobby', 'work']
+    ]
+  const prng = makeSeededRandom(seedFromDateKey(dayInfo.dateKey) ^ 0x2468ace0)
+  const order = patterns[Math.floor(prng() * patterns.length)]
+
+  const bodyParts = [`今日のひとこと: ${wrapForMarkdown(maskPrivacy(quip))}`]
+  for (const key of order) {
+    if (sections[key]) bodyParts.push(sections[key])
+  }
+  bodyParts.push(`## 気分・感謝・明日の一言\n- 気分: ${maskPrivacy(mood)}/10\n- 感謝: ${maskPrivacy(thanks)}\n- 明日の一言: ${maskPrivacy(tomorrow)}`)
+
+  const body = bodyParts.join('\n\n')
+  const content = `${frontMatter}\n\n${body}`
+  await writeFile(absFile, content, 'utf8')
+  console.log('Created:', path.relative(repoRoot, absFile))
+}
+
+main().catch(err => {
+  console.error(err)
+  process.exit(1)
+})
