@@ -1,60 +1,66 @@
 {{ define "main" }}
-  <section>
-    <h2>{{ if .IsHome }}{{ .Site.Title }} の日記一覧{{ else }}{{ .Title }}{{ end }}</h2>
-    {{ with .Description }}<p>{{ . }}</p>{{ end }}
+<section>
+  <h2>{{ if .IsHome }}{{ .Site.Title }} の日記一覧{{ else }}{{ .Title }}{{ end }}</h2>
+  {{ with .Description }}<p>{{ . }}</p>{{ end }}
 
-    {{- $pages := union .RegularPages .Sections }}
-    {{- if .IsHome }}
-      {{- $pages = where site.RegularPages "Type" "in" site.Params.mainSections }}
-      {{- $pages = where $pages "Params.hiddenInHomeList" "!=" "true" }}
-    {{- end }}
+  {{- $pages := union .RegularPages .Sections }}
+  {{- if .IsHome }}
+  {{- $pages = where site.RegularPages "Type" "in" site.Params.mainSections }}
+  {{- $pages = where $pages "Params.hiddenInHomeList" "!=" "true" }}
+  {{- end }}
 
-    {{- $paginator := .Paginate $pages }}
+  {{- $paginator := .Paginate $pages }}
 
-    {{- if not (gt (len $paginator.Pages) 0) }}
-      <p>まだ記事がありません。GitHub Actions かスクリプトで生成してください。</p>
-    {{- end }}
+  {{- if not (gt (len $paginator.Pages) 0) }}
+  <p>まだ記事がありません。GitHub Actions かスクリプトで生成してください。</p>
+  {{- end }}
 
-    <div class="post-list">
-      {{- range $paginator.Pages }}
-        <article class="post-card">
-          {{- $thumb := "" }}
-          {{- with .Params.cover.image }}
-            {{- $clean := replaceRE "^/" "" . }}
-            {{- if fileExists (printf "static/%s" $clean) }}
-              {{- $thumb = $clean | relURL }}
-            {{- else if site.Params.defaultOgImage }}
-              {{- $thumb = site.Params.defaultOgImage | relURL }}
-            {{- end }}
-          {{- end }}
-          {{- if and (eq $thumb "") site.Params.defaultOgImage }}
-            {{- $thumb = site.Params.defaultOgImage | relURL }}
-          {{- end }}
-          <a class="post-card__thumb" href="{{ .RelPermalink }}">
-            {{- if $thumb }}
-              <img src="{{ $thumb }}" alt="{{ .Title }}" loading="lazy">
-            {{- end }}
-          </a>
-          <div class="post-card__body">
-            <p class="post-card__meta">
-              {{ .Date.Format "2006-01-02" }}
-              {{- with .Params.categories }}
-                ／ {{ index . 0 }}
-              {{- end }}
-            </p>
-            <h3 class="post-card__title">
-              <a href="{{ .RelPermalink }}">{{ .Title }}</a>
-            </h3>
-            <p class="post-card__excerpt">
-              {{ .Summary | plainify | htmlUnescape | truncate 140 }}
-            </p>
-            <a class="post-card__more" href="{{ .RelPermalink }}">続きを読む</a>
-          </div>
-        </article>
+  <div class="post-list">
+    {{- range $paginator.Pages }}
+    <article class="post-card">
+      {{- $thumb := "" }}
+      {{- with .Params.cover.image }}
+      {{- $clean := replaceRE "^/" "" . }}
+      {{- if fileExists (printf "static/%s" $clean) }}
+      {{- $thumb = $clean | relURL }}
+      {{- else if site.Params.defaultOgImage }}
+      {{- $thumb = site.Params.defaultOgImage | relURL }}
       {{- end }}
-    </div>
+      {{- end }}
+      {{- if and (eq $thumb "") site.Params.defaultOgImage }}
+      {{- $thumb = site.Params.defaultOgImage | relURL }}
+      {{- end }}
+      <a class="post-card__thumb" href="{{ .RelPermalink }}">
+        {{- if $thumb }}
+        <img src="{{ $thumb }}" alt="{{ .Title }}" loading="lazy">
+        {{- end }}
+      </a>
+      <div class="post-card__body">
+        <p class="post-card__meta">
+          {{ .Date.Format "2006-01-02" }}
+          {{- with .Params.categories }}
+          ／ {{ index . 0 }}
+          {{- end }}
+        </p>
+        <h3 class="post-card__title">
+          <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+        </h3>
+        <p class="post-card__excerpt">
+          {{ .Summary | plainify | htmlUnescape | truncate 140 }}
+        </p>
+        <a class="post-card__more" href="{{ .RelPermalink }}">
+          Read more
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </a>
+      </div>
+    </article>
+    {{- end }}
+  </div>
 
-    {{ template "_internal/pagination.html" . }}
-  </section>
+  {{ template "_internal/pagination.html" . }}
+</section>
 {{ end }}
-
