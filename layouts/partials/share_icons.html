@@ -1,11 +1,11 @@
-{{- $shareURL := .Permalink -}}            {{/* 生URLのまま（ブラウザが1回だけエンコード） */}}
+{{- $shareURL := .Permalink -}} {{/* 生URLのまま（ブラウザが1回だけエンコード） */}}
 {{- $title := .Title | plainify -}}
 
 {{- $.Scratch.Set "tags" "" -}}
 {{- with .Params.Tags -}}
-  {{- $hashtags := newScratch -}}
-  {{- range . }}{{ $hashtags.Add "tags" (slice (replaceRE "(\\s)" "" . ))}}{{ end -}}
-  {{- $.Scratch.Set "tags" (delimit ($hashtags.Get "tags") ",") -}}
+{{- $hashtags := newScratch -}}
+{{- range . }}{{ $hashtags.Add "tags" (slice (replaceRE "(\\s)" "" . ))}}{{ end -}}
+{{- $.Scratch.Set "tags" (delimit ($hashtags.Get "tags") ",") -}}
 {{- end -}}
 {{- $hashtags := $.Scratch.Get "tags" -}}
 
@@ -15,52 +15,53 @@
 <ul class="share-buttons share-buttons--custom">
   {{- if (in $ShareButtons "x") }}
   <li>
-    <a target="_blank" rel="noopener noreferrer" aria-label="Xでシェア: {{ $title }}"
+    <a class="share-btn share-btn--x" target="_blank" rel="noopener noreferrer" aria-label="Xでシェア: {{ $title }}"
       href="https://x.com/intent/post?text={{ $title }}&amp;url={{ $shareURL }}{{ if $hashtags }}&amp;hashtags={{ $hashtags }}{{ end }}">
-      <svg version="1.1" viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
+      <svg version="1.1" viewBox="0 0 512 512" height="20px" width="20px" fill="currentColor" aria-hidden="true">
         <path
-          d="M512 62.554V449.446C512 483.97 483.97 512 449.446 512H62.554C28.03 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446C483.971 0 512 28.03 512 62.554ZM269.951 190.75L182.567 75.216H56L207.216 272.95 63.9 436.783H125.266L235.9 310.383 332.567 436.783H456L298.367 228.367 432.367 75.216H371.033Z" />
+          d="M389.2 48h70.6L305.6 224.2 487 464H345L233.7 318.6 106.5 464H35.8L200.7 275.5 26.8 48H172.4L272.9 180.9 389.2 48zM364.4 421.8h39.1L151.1 88h-42L364.4 421.8z" />
       </svg>
-      <span class="share-label">Xでシェア</span>
+      <span class="share-label">Post</span>
     </a>
   </li>
   {{- end }}
 
   {{- if (in $ShareButtons "line") }}
   <li>
-    <a target="_blank" rel="noopener noreferrer" aria-label="LINEでシェア: {{ $title }}"
+    <a class="share-btn share-btn--line" target="_blank" rel="noopener noreferrer" aria-label="LINEでシェア: {{ $title }}"
       href="https://social-plugins.line.me/lineit/share?url={{ $shareURL }}&amp;text={{ $title }}">
-      <svg viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 512 512" height="20px" width="20px" fill="currentColor" aria-hidden="true">
         <path
-          d="M80 64h352c26.5 0 48 21.5 48 48v208c0 26.5-21.5 48-48 48H288l-32 80-32-80H80c-26.5 0-48-21.5-48-48V112c0-26.5 21.5-48 48-48Z" />
+          d="M412.2 220.4c-9.6-70.3-67.5-125.7-138.8-132.3-95.6-8.9-178.6 57.7-192.5 149.3-5.3 35 .7 68.8 14.6 98.7-7.9 29.5-25.2 60.6-26.6 63.3-.6 1.1-.9 2.4-.8 3.7.1 1.3.6 2.5 1.5 3.4 1 1 2.3 1.5 3.7 1.4 1.4-.1 2.7-.6 3.7-1.4 10.3-8.8 35.6-32.6 61.2-41 24.5 12.8 52.8 20.3 82.7 20.3 89.6 0 165-65.4 179.8-151.7.3-1.8.6-3.7.9-5.6 0-.6 0-1.2.1-1.8.1-1.4.3-2.7.5-4.1.2-1.4.3-2.9.4-4.2zm-223 93.3c-4.2 0-7.7-3.4-7.7-7.7V229.4l-38.3 54.7c-1.3 1.9-3.4 3-5.6 3s-4.3-1.1-5.6-3c-1.3-1.9-2.1-4.1-2.1-6.4V220c0-4.2 3.4-7.7 7.7-7.7s7.7 3.4 7.7 7.7v50.9l38.3-54.7c1.3-1.9 3.4-3 5.6-3s4.3 1.1 5.6 3c1.3 1.9 2.1 4.1 2.1 6.4v57.7c0 4.3-3.4 7.7-7.7 7.7zm49.9 0c-4.2 0-7.7-3.4-7.7-7.7v-57.7c0-4.2 3.4-7.7 7.7-7.7s7.7 3.4 7.7 7.7v57.7c0 4.3-3.4 7.7-7.7 7.7zm65.9 0h-32.4c-4.2 0-7.7-3.4-7.7-7.7v-42.3h-16.2c-4.2 0-7.7-3.4-7.7-7.7s3.4-7.7 7.7-7.7h32.4c4.2 0 7.7 3.4 7.7 7.7v50c0 4.3-3.4 7.7-7.7 7.7zm63.4 0h-37.4c-4.2 0-7.7-3.4-7.7-7.7V220c0-4.2 3.4-7.7 7.7-7.7s7.7 3.4 7.7 7.7v50h29.7c4.2 0 7.7 3.4 7.7 7.7s-3.5 7.7-7.7 7.7z" />
       </svg>
-      <span class="share-label">LINEでシェア</span>
+      <span class="share-label">LINE</span>
     </a>
   </li>
   {{- end }}
 
   {{- if (in $ShareButtons "facebook") }}
   <li>
-    <a target="_blank" rel="noopener noreferrer" aria-label="Facebookでシェア: {{ $title }}"
+    <a class="share-btn share-btn--fb" target="_blank" rel="noopener noreferrer" aria-label="Facebookでシェア: {{ $title }}"
       href="https://www.facebook.com/sharer/sharer.php?u={{ $shareURL }}">
-      <svg version="1.1" viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
+      <svg version="1.1" viewBox="0 0 512 512" height="20px" width="20px" fill="currentColor" aria-hidden="true">
         <path
-          d="M449.446 0C483.971 0 512 28.03 512 62.554V449.446C512 483.971 483.97 512 449.446 512H62.554C28.029 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446ZM335 176h-48c-9.941 0-18 8.059-18 18v46h66l-10 64h-56v160h-64V304h-48v-64h48v-56c0-39.701 32.299-72 72-72h58v64Z" />
+          d="M504 256C504 119 393 8 256 8S8 119 8 256c0 123.78 90.69 226.38 209.25 245V327.69h-63V256h63v-54.64c0-62.15 37-96.48 93.67-96.48 27.14 0 55.52 4.84 55.52 4.84v61h-31.28c-30.8 0-40.41 19.12-40.41 38.73V256h68.78l-11 71.69h-57.78V501C413.31 482.38 504 379.78 504 256z" />
       </svg>
-      <span class="share-label">Facebookでシェア</span>
+      <span class="share-label">Share</span>
     </a>
   </li>
   {{- end }}
 
   {{- if (in $ShareButtons "hatena") }}
   <li>
-    <a target="_blank" rel="noopener noreferrer" aria-label="はてなブックマークに追加: {{ $title }}"
+    <a class="share-btn share-btn--hatena" target="_blank" rel="noopener noreferrer"
+      aria-label="はてなブックマークに追加: {{ $title }}"
       href="https://b.hatena.ne.jp/add?mode=confirm&amp;url={{ $shareURL }}&amp;title={{ $title }}">
-      <svg viewBox="0 0 512 512" height="30px" width="30px" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 512 512" height="20px" width="20px" fill="currentColor" aria-hidden="true">
         <path
-          d="M449.446 0C483.971 0 512 28.03 512 62.554V449.446C512 483.971 483.97 512 449.446 512H62.554C28.029 512 0 483.97 0 449.446V62.554C0 28.03 28.029 0 62.554 0H449.446ZM176 128v256h64v-88h64v88h64V128h-64v96h-64v-96h-64Zm224 224c0 35.346-28.654 64-64 64s-64-28.654-64-64 28.654-64 64-64 64 28.654 64 64Z" />
+          d="M504 256C504 119.033 392.967 8 256 8S8 119.033 8 256s111.033 248 248 248 248-111.033 248-248zm-247.9 146c-27.1 0-51.4-9.3-69.5-24.8-19.4-16.7-29.2-41-28.7-71.1v-88.7h52.1v69.6c0 23.9 13.9 33.4 34.3 33.4 12.3 0 25.4-6.4 25.4-23v-10h-25.4v-40h78.8v60.9c0 53.6-28.8 93.7-67 93.7zm116.3-100c0 24.3-17.6 42.1-45.7 42.1h-29V252h29c12 0 16.9-6.8 16.9-15.1 0-9.2-5.7-14.8-16.7-14.8h-29.2v-32.2h28.6c24 0 46.1 16 46.1 42.1z" />
       </svg>
-      <span class="share-label">はてブでシェア</span>
+      <span class="share-label">B!</span>
     </a>
   </li>
   {{- end }}

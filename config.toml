@@ -18,6 +18,10 @@ enableRobotsTXT = true
   ShowCodeCopyButtons = true
   ShowToc = true
   mainSections = ["posts"]
+  [params.adsense]
+    client = "ca-pub-7953303438736598"
+    articleSlot = ""
+    multiplexSlot = "7897129285"
 
 [outputs]
   home = ["HTML", "RSS", "JSON"]
@@ -31,3 +35,15 @@ enableRobotsTXT = true
     name = "About"
     url = "/about/"
     weight = 10
+  [[menu.main]]
+    name = "運営ポリシー"
+    url = "/policies/"
+    weight = 20
+  [[menu.main]]
+    name = "プライバシー"
+    url = "/privacy/"
+    weight = 30
+  [[menu.main]]
+    name = "お問い合わせ"
+    url = "/contact/"
+    weight = 40

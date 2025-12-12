@@ -1,0 +1,16 @@
+{{- $client := site.Params.adsense.client | default "" }}
+{{- $slot := .slot | default site.Params.adsense.articleSlot | default "" }}
+{{- if and $client $slot }}
+<div class="ad-container ad-container--in-article">
+  <span class="ad-label">広告</span>
+  <ins class="adsbygoogle"
+    style="display:block"
+    data-ad-client="{{ $client }}"
+    data-ad-slot="{{ $slot }}"
+    data-ad-format="auto"
+    data-full-width-responsive="true"></ins>
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
+</div>
+{{- end }}

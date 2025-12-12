@@ -1,7 +1,30 @@
 {{ define "main" }}
 <section>
-  <h2>{{ if .IsHome }}{{ .Site.Title }} の日記一覧{{ else }}{{ .Title }}{{ end }}</h2>
+  {{ if .IsHome }}
+  <section class="hero-section hero-section--home">
+    <span class="hero-eyebrow">リモート会社員 × 3児の父</span>
+    <h1 class="hero-title">{{ .Site.Title }}</h1>
+    <p class="hero-desc">仕事・お金・子育て・趣味を実体験ベースで記録。固定費削減や副業ネタを中心に、同世代がすぐ真似できる工夫をまとめています。</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#offers">おすすめツールを見る</a>
+      {{- $about := "about/" | relURL -}}
+      <a class="btn btn-ghost" href="{{ $about }}">プロフィールと運営方針</a>
+    </div>
+    <ul class="hero-points">
+      <li>家計の固定費と教育費のリアル</li>
+      <li>リモートワーク効率化の小ネタ</li>
+      <li>週末バイト・副業の学び</li>
+      <li>3児の子育てとメンタルケア</li>
+    </ul>
+  </section>
+
+  {{ partial "offer-cards.html" (dict "title" "ぽん次郎の鉄板おすすめ" "subhead" (site.Data.offers.subhead | default "")
+  "disclaimer" (site.Data.offers.disclaimer | default "") "id" "offers") }}
+  <h2>新着日記</h2>
+  {{ else }}
+  <h2>{{ .Title }}</h2>
   {{ with .Description }}<p>{{ . }}</p>{{ end }}
+  {{ end }}
 
   {{- $pages := union .RegularPages .Sections }}
   {{- if .IsHome }}
@@ -39,7 +62,7 @@
         <p class="post-card__meta">
           {{ .Date.Format "2006-01-02" }}
           {{- with .Params.categories }}
-          ／ {{ index . 0 }}
+          ・{{ index . 0 }}
           {{- end }}
         </p>
         <h3 class="post-card__title">
@@ -49,7 +72,7 @@
           {{ .Summary | plainify | htmlUnescape | truncate 140 }}
         </p>
         <a class="post-card__more" href="{{ .RelPermalink }}">
-          Read more
+          続きを読む
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 12h14" />
@@ -60,6 +83,8 @@
     </article>
     {{- end }}
   </div>
+
+  {{ partial "adsense-multiplex.html" (dict "slot" (site.Params.adsense.multiplexSlot | default "")) }}
 
   {{ template "_internal/pagination.html" . }}
 </section>

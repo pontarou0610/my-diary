@@ -3,7 +3,7 @@
   ローカル実行向け（CI は scripts/generate.mjs を使用）
 
   Usage:
-    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-4o-mini]
+    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-5.1]
 *#>
 param(
   [datetime]$Date = (Get-Date),
@@ -158,7 +158,7 @@ $quip=$work=$workLearning=$money=$moneyTip=$parenting=$dadpt=$hobby=$mood=$thank
 if ($UseAI) {
   $dotenv = Get-DotEnv (Join-Path $root '.env')
   if (-not $env:OPENAI_API_KEY -and $dotenv['OPENAI_API_KEY']) { $env:OPENAI_API_KEY = $dotenv['OPENAI_API_KEY'] }
-  if (-not $Model) { $Model = $env:OPENAI_MODEL; if (-not $Model) { $Model = 'gpt-4o-mini' } }
+  if (-not $Model) { $Model = $env:OPENAI_MODEL; if (-not $Model) { $Model = 'gpt-5.1' } }
   if ($env:OPENAI_API_KEY) {
     try {
       $bodyObj = [pscustomobject]@{

@@ -12,7 +12,7 @@
     <h1 class="post-hero__title">{{ .Title }}</h1>
 
     <div class="post-hero__meta">
-      <time datetime="{{ .Date.Format " 2006-01-02T15:04:05Z07:00" }}">
+      <time datetime="{{ .Date.Format "2006-01-02T15:04:05Z07:00" }}">
         {{ .Date.Format "2006.01.02" }}
       </time>
       {{- if .Params.categories }}
@@ -44,6 +44,10 @@
   <div class="post-content">
     {{ .Content }}
   </div>
+
+  {{ partial "adsense-ad.html" (dict "slot" (site.Params.adsense.articleSlot | default "")) }}
+
+  {{ partial "offer-cards.html" (dict "title" "ぽん次郎が実際に使っているおすすめ" "subhead" "家計・副業・リモート環境に効いたサービスをまとめました。" "disclaimer" (site.Data.offers.disclaimer | default "") "id" "offers") }}
 
   <footer class="share-buttons">
     {{- if (and site.Params.ShowShareButtons (ne .Params.disableShare true)) }}

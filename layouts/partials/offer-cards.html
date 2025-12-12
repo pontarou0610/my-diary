@@ -1,0 +1,28 @@
+{{- $data := site.Data.offers -}}
+{{- with $data }}
+  {{- $items := .items | default (slice) -}}
+  {{- if gt (len $items) 0 }}
+  {{- $heading := $.title | default (.headline | default "ぽん次郎のおすすめツール") -}}
+  {{- $sub := $.subhead | default (.subhead | default "") -}}
+  {{- $disclaimer := $.disclaimer | default (.disclaimer | default "※本ページにはプロモーション・アフィリエイトリンクが含まれます。") -}}
+  <section class="offer-section" id="{{ $.id | default "offers" }}">
+    <div class="offer-heading">
+      <p class="offer-chip">PR / おすすめ</p>
+      <h2>{{ $heading }}</h2>
+      {{- if $sub }}<p class="offer-lead">{{ $sub }}</p>{{- end }}
+    </div>
+    <div class="offer-grid">
+      {{- range $items }}
+      <article class="offer-card">
+        {{- with .badge }}<p class="offer-badge">{{ . }}</p>{{- end }}
+        <h3 class="offer-title">{{ .title }}</h3>
+        <p class="offer-text">{{ .description }}</p>
+        <a class="offer-btn" href="{{ .href }}" target="_blank" rel="sponsored noopener">{{ .cta | default "詳細を見る" }}</a>
+        {{- with .note }}<p class="offer-note">{{ . }}</p>{{- end }}
+      </article>
+      {{- end }}
+    </div>
+    <p class="offer-disclaimer">{{ $disclaimer }}</p>
+  </section>
+  {{- end }}
+{{- end }}

@@ -2,7 +2,7 @@
  * Ponjiro の日記を AI / Pexels 付きで生成するスクリプト
  * node scripts/generate.mjs
  */
-import { mkdir, writeFile, access } from 'node:fs/promises'
+import { mkdir, writeFile, access, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
@@ -202,6 +202,253 @@ async function fileExists(p) {
   try { await access(p, constants.F_OK); return true } catch { return false }
 }
 
+async function readTitleFromPost(absFile) {
+  try {
+    const txt = await readFile(absFile, 'utf8')
+    const m = txt.match(/title\s*=\s*"([^"]+)"/)
+    return m ? m[1] : path.basename(absFile)
+  } catch {
+    return path.basename(absFile)
+  }
+}
+
+async function resolvePostInfo(repoRoot, dateKey) {
+  const [yyyy, mm, dd] = dateKey.split('-')
+  const relDir = path.join('content', 'posts', yyyy, mm, dd)
+  const absFile = path.join(repoRoot, relDir, `${dateKey}.md`)
+  if (!(await fileExists(absFile))) return null
+  const title = await readTitleFromPost(absFile)
+  const relLink = `/posts/${yyyy}/${mm}/${dd}/`
+  return { dateKey, title, relLink, absFile }
+}
+
+function rangeDatesUTC(startUTC, endUTC) {
+  const out = []
+  const cursor = new Date(startUTC)
+  while (cursor.getTime() <= endUTC.getTime()) {
+    out.push(new Date(cursor))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return out
+}
+
+async function collectPostsInRange(repoRoot, startUTC, endUTC) {
+  const dates = rangeDatesUTC(startUTC, endUTC)
+  const items = []
+  for (const d of dates) {
+    const info = await resolvePostInfo(repoRoot, dateKeyFromDateUTC(d))
+    if (info) items.push(info)
+  }
+  return items
+}
+
+function startOfWeekMondayUTC(dateUTC) {
+  const dow = dateUTC.getUTCDay() // 0=Sun
+  const diff = (dow + 6) % 7 // days since Monday
+  const monday = new Date(dateUTC)
+  monday.setUTCDate(monday.getUTCDate() - diff)
+  return monday
+}
+
+function isLastDayOfMonthUTC(dateUTC) {
+  const next = new Date(dateUTC)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.getUTCMonth() !== dateUTC.getUTCMonth()
+}
+
+async function generateWeeklySummary(now, repoRoot) {
+  const parts = formatTokyoParts(now)
+  const todayUTC = utcDateFromParts(parts.yyyy, parts.mm, parts.dd)
+  if (todayUTC.getUTCDay() !== 1) return // 月曜のみ生成
+
+  const thisMonday = startOfWeekMondayUTC(todayUTC)
+  const prevMonday = new Date(thisMonday); prevMonday.setUTCDate(prevMonday.getUTCDate() - 7)
+  const prevSunday = new Date(thisMonday); prevSunday.setUTCDate(prevSunday.getUTCDate() - 1)
+
+  const weekLabel = `${dateKeyFromDateUTC(prevMonday)}〜${dateKeyFromDateUTC(prevSunday)}`
+  const slug = `week-${dateKeyFromDateUTC(prevMonday)}-${dateKeyFromDateUTC(prevSunday)}`
+  const relDir = path.join('content', 'posts', String(prevSunday.getUTCFullYear()), 'weekly')
+  const absDir = path.join(repoRoot, relDir)
+  await mkdir(absDir, { recursive: true })
+  const absFile = path.join(absDir, `${slug}.md`)
+  if (await fileExists(absFile)) return
+
+  const posts = await collectPostsInRange(repoRoot, prevMonday, prevSunday)
+  if (!posts.length) return
+
+  const title = `週次まとめ ${weekLabel}`
+  const fm = [
+    '+++',
+    `title = "${title}"`,
+    `date = ${dateKeyFromDateUTC(todayUTC)}T09:00:00+09:00`,
+    'draft = false',
+    'tags = ["週次まとめ", "日記ダイジェスト"]',
+    'categories = ["まとめ"]',
+    '+++'
+  ].join('\n')
+
+  const list = posts.map(p => `- ${p.dateKey}: [${p.title}](${p.relLink})`).join('\n') || '今週の記事はまだありませんでした。'
+  const bodyParts = [
+    `今週のまとめ（${weekLabel}）`,
+    `- 投稿数: ${posts.length}件`,
+    '',
+    '## ハイライト',
+    list,
+    '',
+    '## 来週に向けたメモ',
+    '- 仕事: 朝イチで重めのタスクを前倒しする。',
+    '- お金: 固定費チェックは週末の買い出し前に10分。',
+    '- 子育て: 1人ずつ5分トークの時間を作る。',
+    '- 趣味/休息: スキマ時間のスマホを15分だけ読書・音声学習に振り替える。'
+  ]
+  const content = `${fm}\n\n${bodyParts.join('\n')}\n`
+  await writeFile(absFile, content, 'utf8')
+  console.log('Created weekly summary:', path.relative(repoRoot, absFile))
+}
+
+async function generateMonthlySummary(now, repoRoot) {
+  const parts = formatTokyoParts(now)
+  if (parts.dd !== '01') return // 月初のみ生成
+  const monthStart = utcDateFromParts(parts.yyyy, parts.mm, '01')
+  const prevMonthEnd = new Date(monthStart); prevMonthEnd.setUTCDate(prevMonthEnd.getUTCDate() - 1)
+  const prevMonthStart = new Date(Date.UTC(prevMonthEnd.getUTCFullYear(), prevMonthEnd.getUTCMonth(), 1))
+
+  const label = `${prevMonthStart.getUTCFullYear()}年${String(prevMonthStart.getUTCMonth() + 1).padStart(2, '0')}月`
+  const slug = `month-${prevMonthStart.getUTCFullYear()}-${String(prevMonthStart.getUTCMonth() + 1).padStart(2, '0')}`
+  const relDir = path.join('content', 'posts', String(prevMonthStart.getUTCFullYear()), 'monthly')
+  const absDir = path.join(repoRoot, relDir)
+  await mkdir(absDir, { recursive: true })
+  const absFile = path.join(absDir, `${slug}.md`)
+  if (await fileExists(absFile)) return
+
+  const posts = await collectPostsInRange(repoRoot, prevMonthStart, prevMonthEnd)
+  if (!posts.length) return
+
+  const title = `月次まとめ ${label}`
+  const fm = [
+    '+++',
+    `title = "${title}"`,
+    `date = ${parts.yyyy}-${parts.mm}-01T09:30:00+09:00`,
+    'draft = false',
+    'tags = ["月次まとめ", "日記ダイジェスト"]',
+    'categories = ["まとめ"]',
+    '+++'
+  ].join('\n')
+
+  const list = posts.map(p => `- ${p.dateKey}: [${p.title}](${p.relLink})`).join('\n')
+  const bodyParts = [
+    `${label}のまとめ`,
+    `- 投稿数: ${posts.length}件`,
+    '',
+    '## 月間ハイライト',
+    list,
+    '',
+    '## 振り返りメモ',
+    '- 仕事: 短時間で区切るタスク管理を徹底し、振り返りを週次で仕込む。',
+    '- お金: 教育費と固定費の見直しを1回以上実施。レシート入力は即日。',
+    '- 子育て: 個別時間と雑談タイムを意識して確保。',
+    '- 体調/趣味: 睡眠と運動を優先し、ゲーム/マンガはご褒美時間に設定。'
+  ]
+  const content = `${fm}\n\n${bodyParts.join('\n')}\n`
+  await writeFile(absFile, content, 'utf8')
+  console.log('Created monthly summary:', path.relative(repoRoot, absFile))
+}
+
+// --- v2: 日曜夜と月末夜に生成する版（上書き定義） ---
+async function generateWeeklySummary(now, repoRoot, dayInfo) {
+  if (dayInfo.weekdayJP !== '日曜日') return
+  const todayUTC = dayInfo.utcDate
+  const weekStart = startOfWeekMondayUTC(todayUTC)
+  const weekEnd = new Date(todayUTC)
+
+  const weekLabel = `${dateKeyFromDateUTC(weekStart)}～${dateKeyFromDateUTC(weekEnd)}`
+  const slug = `week-${dateKeyFromDateUTC(weekStart)}-${dateKeyFromDateUTC(weekEnd)}`
+  const relDir = path.join('content', 'posts', String(weekEnd.getUTCFullYear()), 'weekly')
+  const absDir = path.join(repoRoot, relDir)
+  await mkdir(absDir, { recursive: true })
+  const absFile = path.join(absDir, `${slug}.md`)
+  if (await fileExists(absFile)) return
+
+  const posts = await collectPostsInRange(repoRoot, weekStart, weekEnd)
+  if (!posts.length) return
+
+  const title = `週次まとめ ${weekLabel}`
+  const fm = [
+    '+++',
+    `title = "${title}"`,
+    `date = ${dateKeyFromDateUTC(todayUTC)}T22:00:00+09:00`,
+    'draft = false',
+    'tags = ["週次まとめ", "日記ダイジェスト"]',
+    'categories = ["まとめ"]',
+    '+++'
+  ].join('\n')
+
+  const list = posts.map(p => `- ${p.dateKey}: [${p.title}](${p.relLink})`).join('\n') || '今週の記事はまだありませんでした。'
+  const bodyParts = [
+    `今週のまとめ（${weekLabel}）`,
+    `- 投稿数: ${posts.length}件`,
+    '',
+    '## ハイライト',
+    list,
+    '',
+    '## 来週に向けたメモ',
+    '- 仕事: 朝イチで重めのタスクを前倒しする。',
+    '- お金: 固定費チェックは週末の買い出し前に10分。',
+    '- 子育て: 1人ずつ5分トークの時間を作る。',
+    '- 趣味/休息: スキマ時間のスマホを15分だけ読書・音声学習に振り替える。'
+  ]
+  const content = `${fm}\n\n${bodyParts.join('\n')}\n`
+  await writeFile(absFile, content, 'utf8')
+  console.log('Created weekly summary:', path.relative(repoRoot, absFile))
+}
+
+async function generateMonthlySummary(now, repoRoot, dayInfo) {
+  const todayUTC = dayInfo.utcDate
+  if (!isLastDayOfMonthUTC(todayUTC)) return
+
+  const monthStart = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), 1))
+  const monthEnd = new Date(todayUTC)
+
+  const label = `${monthStart.getUTCFullYear()}年${String(monthStart.getUTCMonth() + 1).padStart(2, '0')}月`
+  const slug = `month-${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, '0')}`
+  const relDir = path.join('content', 'posts', String(monthStart.getUTCFullYear()), 'monthly')
+  const absDir = path.join(repoRoot, relDir)
+  await mkdir(absDir, { recursive: true })
+  const absFile = path.join(absDir, `${slug}.md`)
+  if (await fileExists(absFile)) return
+
+  const posts = await collectPostsInRange(repoRoot, monthStart, monthEnd)
+  if (!posts.length) return
+
+  const title = `月次まとめ ${label}`
+  const fm = [
+    '+++',
+    `title = "${title}"`,
+    `date = ${dateKeyFromDateUTC(todayUTC)}T22:30:00+09:00`,
+    'draft = false',
+    'tags = ["月次まとめ", "日記ダイジェスト"]',
+    'categories = ["まとめ"]',
+    '+++'
+  ].join('\n')
+
+  const list = posts.map(p => `- ${p.dateKey}: [${p.title}](${p.relLink})`).join('\n')
+  const bodyParts = [
+    `${label}のまとめ`,
+    `- 投稿数: ${posts.length}件`,
+    '',
+    '## 月間ハイライト',
+    list,
+    '',
+    '## 振り返りメモ',
+    '- 仕事: 短時間で区切るタスク管理を徹底し、振り返りを週次で仕込む。',
+    '- お金: 教育費と固定費の見直しを1回以上実施。レシート入力は即日。',
+    '- 子育て: 個別時間と雑談タイムを意識して確保。',
+    '- 体調/趣味: 睡眠と運動を優先し、ゲーム/マンガはご褒美時間に設定。'
+  ]
+  const content = `${fm}\n\n${bodyParts.join('\n')}\n`
+  await writeFile(absFile, content, 'utf8')
+  console.log('Created monthly summary:', path.relative(repoRoot, absFile))
+}
 function decideSideJobPlan(dayInfo = null, rng = Math.random) {
   const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long' })
   const day = dayInfo?.weekdayEn || fmt.format(new Date())
@@ -352,10 +599,7 @@ async function main() {
 
   const slug = `${yyyy}-${mm}-${dd}`
   const absFile = path.join(absDir, `${slug}.md`)
-  if (await fileExists(absFile)) {
-    console.log(`Already exists: ${absFile}`)
-    return
-  }
+  const exists = await fileExists(absFile)
 
   const draft = 'false'
   const sjRng = makeSeededRandom(seedFromDateKey(dayInfo.dateKey) ^ 0x13572468)
@@ -398,7 +642,7 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
   let { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, trend, mood, thanks, tomorrow } = buildOfflineDiary(dayInfo)
 
   const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+  const model = process.env.OPENAI_MODEL || 'gpt-5.1'
 
   if (apiKey) {
     try {
@@ -525,8 +769,16 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
 
   const body = bodyParts.join('\n\n')
   const content = `${frontMatter}\n\n${body}`
-  await writeFile(absFile, content, 'utf8')
-  console.log('Created:', path.relative(repoRoot, absFile))
+
+  if (!exists) {
+    await writeFile(absFile, content, 'utf8')
+    console.log('Created:', path.relative(repoRoot, absFile))
+  } else {
+    console.log(`Already exists: ${absFile}`)
+  }
+
+  await generateWeeklySummary(now, repoRoot, dayInfo)
+  await generateMonthlySummary(now, repoRoot, dayInfo)
 }
 
 main().catch(err => {

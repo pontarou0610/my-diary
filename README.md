@@ -26,11 +26,11 @@
 ### OpenAI API の設定
 
 - 環境変数に API キーを設定: `setx OPENAI_API_KEY "sk-..."`
-- モデル指定は任意: `setx OPENAI_MODEL "gpt-4o-mini"`（未指定なら `gpt-4o-mini`）
+- モデル指定は任意: `setx OPENAI_MODEL "gpt-5.1"`（未指定なら `gpt-5.1`）
 - もしくは、リポジトリ直下に `.env` を置く
   - 例:
     - `OPENAI_API_KEY=sk-...`
-    - `OPENAI_MODEL=gpt-4o-mini`
+    - `OPENAI_MODEL=gpt-5.1`
 
 ### Pexels（関連画像の自動取得）
 
@@ -66,7 +66,7 @@
   - リポジトリ Settings → Pages: Source を `Deploy from a branch` に設定し、Branch を `gh-pages` に（初回実行後に選択可能）
   - Settings → Secrets and variables → Actions → New repository secret で追加
     - `OPENAI_API_KEY`: OpenAIのAPIキー
-    - 任意 `OPENAI_MODEL`: 例 `gpt-4o-mini`
+    - 任意 `OPENAI_MODEL`: 例 `gpt-5.1`
     - 任意 `PEXELS_API_KEY`: 関連画像（カバー）を自動取得したい場合
 
 - 手動実行（テスト）
