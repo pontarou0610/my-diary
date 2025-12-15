@@ -3,7 +3,7 @@
   ローカル実行向け（CI は scripts/generate.mjs を使用）
 
   Usage:
-    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-5.1]
+    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-4o]
 *#>
 param(
   [datetime]$Date = (Get-Date),
@@ -14,6 +14,28 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Get-AIModelConfig {
+  param([string]$RepoRoot)
+  $configPath = Join-Path $RepoRoot 'config/ai-model.json'
+  if (-not (Test-Path $configPath)) {
+    return @{ defaultModel = 'gpt-4o'; maxTokens = 1600; temperature = 0.9 }
+  }
+  try {
+    $config = Get-Content -Path $configPath -Encoding UTF8 | ConvertFrom-Json
+    $defaultModel = $config.openai.defaultModel
+    $modelConfig = $config.openai.models.$defaultModel
+    return @{
+      defaultModel = $defaultModel
+      maxTokens    = $modelConfig.maxTokens
+      temperature  = $modelConfig.temperature
+    }
+  }
+  catch {
+    Write-Warning "設定ファイルの読み込みに失敗: $_"
+    return @{ defaultModel = 'gpt-4o'; maxTokens = 1600; temperature = 0.9 }
+  }
+}
+
 function Get-DotEnv {
   param([string]$FilePath)
   if (-not (Test-Path $FilePath)) { return @{} }
@@ -22,8 +44,8 @@ function Get-DotEnv {
     if ($_ -match '^\s*(#|$)') { return }
     $i = $_.IndexOf('=')
     if ($i -lt 1) { return }
-    $k = $_.Substring(0,$i).Trim()
-    $v = $_.Substring($i+1).Trim().Trim('"')
+    $k = $_.Substring(0, $i).Trim()
+    $v = $_.Substring($i + 1).Trim().Trim('"')
     $map[$k] = $v
   }
   return $map
@@ -67,11 +89,11 @@ function Get-WeekdayJP {
 }
 
 function Get-TitleFromQuip {
-  param([string]$DateString,[string]$Quip)
-  $clean = (Protect-Privacy $Quip).Replace("`r",'').Replace("`n",' ').Trim()
-  $clean = ($clean -replace '\s+',' ')
+  param([string]$DateString, [string]$Quip)
+  $clean = (Protect-Privacy $Quip).Replace("`r", '').Replace("`n", ' ').Trim()
+  $clean = ($clean -replace '\s+', ' ')
   if (-not $clean) { return "$DateString 日記" }
-  $snippet = if ($clean.Length -gt 20) { $clean.Substring(0,20) + '…' } else { $clean }
+  $snippet = if ($clean.Length -gt 20) { $clean.Substring(0, 20) + '…' } else { $clean }
   return "$DateString 日記 - $snippet"
 }
 
@@ -87,7 +109,7 @@ function Get-SideJobPlan {
     else { $plannedDay = if ($rand.NextDouble() -lt 0.5) { 'Saturday' } else { 'Sunday' } }
   }
   $isToday = ($day -eq [System.DayOfWeek]::Saturday -and $plannedDay -eq 'Saturday') -or
-             ($day -eq [System.DayOfWeek]::Sunday   -and $plannedDay -eq 'Sunday')
+  ($day -eq [System.DayOfWeek]::Sunday -and $plannedDay -eq 'Sunday')
   [pscustomobject]@{
     SchoolEventOnSaturday = $schoolEventSat
     PlannedSideJobDay     = $plannedDay
@@ -96,8 +118,8 @@ function Get-SideJobPlan {
 }
 
 function Get-PexelsQuery {
-  param([string]$Hobby,[string]$Parenting,[string]$Work)
-  $extraTags = @('昼','夜','夕方','朝','雨','晴れ','リビング','カフェ','公園','街','家族')
+  param([string]$Hobby, [string]$Parenting, [string]$Work)
+  $extraTags = @('昼', '夜', '夕方', '朝', '雨', '晴れ', 'リビング', 'カフェ', '公園', '街', '家族')
   $extra = Get-Random -InputObject $extraTags
   $base = ("$Hobby $Parenting $Work").Trim()
   $q = ("$base $extra").Trim()
@@ -107,8 +129,8 @@ function Get-PexelsQuery {
 
 # ===== パス設定 =====
 $root = Split-Path -Parent $PSScriptRoot
-$rel  = $Date.ToString('yyyy/MM/dd')
-$dir  = Join-Path $root (Join-Path 'content/posts' $rel)
+$rel = $Date.ToString('yyyy/MM/dd')
+$dir = Join-Path $root (Join-Path 'content/posts' $rel)
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $slug = $Date.ToString('yyyy-MM-dd')
 $path = Join-Path $dir ("$slug.md")
@@ -118,8 +140,8 @@ $draft = if ($Publish) { 'false' } else { 'true' }
 # プロンプト
 $plan = Get-SideJobPlan -D $Date
 $schoolJP = if ($plan.SchoolEventOnSaturday) { 'あり' } else { 'なし' }
-$pdayJP   = if ($plan.PlannedSideJobDay -eq 'Saturday') { '土曜' } elseif ($plan.PlannedSideJobDay -eq 'Sunday') { '日曜' } else { 'なし' }
-$todaySJ  = if ($plan.IsTodaySideJob) { 'はい' } else { 'いいえ' }
+$pdayJP = if ($plan.PlannedSideJobDay -eq 'Saturday') { '土曜' } elseif ($plan.PlannedSideJobDay -eq 'Sunday') { '日曜' } else { 'なし' }
+$todaySJ = if ($plan.IsTodaySideJob) { 'はい' } else { 'いいえ' }
 $weekdayJP = Get-WeekdayJP -D $Date
 
 $sys = @"
@@ -153,18 +175,28 @@ JSON だけを出力する。文章トーンは野原ひろし風の口調で、
 
 $user = '上記JSON schemaどおりに、JSON文字列だけで返してください。'
 
-$quip=$work=$workLearning=$money=$moneyTip=$parenting=$dadpt=$hobby=$mood=$thanks=$tomorrow=$null
+$quip = $work = $workLearning = $money = $moneyTip = $parenting = $dadpt = $hobby = $mood = $thanks = $tomorrow = $null
 
 if ($UseAI) {
   $dotenv = Get-DotEnv (Join-Path $root '.env')
   if (-not $env:OPENAI_API_KEY -and $dotenv['OPENAI_API_KEY']) { $env:OPENAI_API_KEY = $dotenv['OPENAI_API_KEY'] }
-  if (-not $Model) { $Model = $env:OPENAI_MODEL; if (-not $Model) { $Model = 'gpt-5.1' } }
+  
+  # モデル設定の読み込み（優先順位: 引数 > 環境変数 > 設定ファイル）
+  $aiConfig = Get-AIModelConfig -RepoRoot $root
+  if (-not $Model) { 
+    $Model = $env:OPENAI_MODEL
+    if (-not $Model) { 
+      $Model = $aiConfig.defaultModel
+      Write-Host "使用モデル: $Model (設定ファイルから読み込み)" -ForegroundColor Cyan
+    }
+  }
+  
   if ($env:OPENAI_API_KEY) {
     try {
       $bodyObj = [pscustomobject]@{
         model           = $Model
-        temperature     = 0.7
-        max_tokens      = 1400
+        temperature     = $aiConfig.temperature
+        max_tokens      = $aiConfig.maxTokens
         response_format = @{ type = 'json_object' }
         messages        = @(
           @{ role = 'system'; content = $sys },
@@ -175,26 +207,28 @@ if ($UseAI) {
       $resp = Invoke-RestMethod -Method Post -Uri 'https://api.openai.com/v1/chat/completions' `
         -Headers @{ Authorization = "Bearer $($env:OPENAI_API_KEY)"; 'Content-Type' = 'application/json' } `
         -Body $bodyJson -TimeoutSec 60
-      $txt  = $resp.choices[0].message.content
+      $txt = $resp.choices[0].message.content
       $json = $null
       try { $json = $txt | ConvertFrom-Json -ErrorAction Stop } catch {}
       if ($json) {
-        $quip         = $json.quip
-        $work         = $json.work
+        $quip = $json.quip
+        $work = $json.work
         $workLearning = $json.work_learning
-        $money        = $json.money
-        $moneyTip     = $json.money_tip
-        $parenting    = $json.parenting
-        $dadpt        = $json.dad_points
-        $hobby        = $json.hobby
-        $mood         = $json.mood
-        $thanks       = $json.thanks
-        $tomorrow     = $json.tomorrow
+        $money = $json.money
+        $moneyTip = $json.money_tip
+        $parenting = $json.parenting
+        $dadpt = $json.dad_points
+        $hobby = $json.hobby
+        $mood = $json.mood
+        $thanks = $json.thanks
+        $tomorrow = $json.tomorrow
       }
-    } catch {
+    }
+    catch {
       Write-Warning ("OpenAI生成に失敗: " + $_.Exception.Message)
     }
-  } else {
+  }
+  else {
     Write-Warning 'OPENAI_API_KEY が未設定のため、テンプレ文で生成します。'
   }
 }
@@ -218,7 +252,7 @@ if ($env:PEXELS_API_KEY) {
     $perPage = 15
     Add-Type -AssemblyName System.Web
     $uri = 'https://api.pexels.com/v1/search?per_page={0}&page={1}&orientation=landscape&query={2}' -f `
-           $perPage, $page, [System.Web.HttpUtility]::UrlEncode($q)
+      $perPage, $page, [System.Web.HttpUtility]::UrlEncode($q)
     $headers = @{ Authorization = $env:PEXELS_API_KEY }
     $pex = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -TimeoutSec 30
     $photo = $pex.photos | Get-Random -Count 1
@@ -232,7 +266,8 @@ if ($env:PEXELS_API_KEY) {
         if (Test-Path $imgPath) { $coverRelative = 'cover.jpg' }
       }
     }
-  } catch {
+  }
+  catch {
     Write-Warning ("Pexels画像取得に失敗: " + $_.Exception.Message)
   }
 }
@@ -248,7 +283,7 @@ $fmLines = @(
   'categories = ["日常"]'
 )
 if ($coverRelative) {
-  $alt = if ($null -ne $quip -and $quip -ne '') { $quip -replace '"','\"' } else { '' }
+  $alt = if ($null -ne $quip -and $quip -ne '') { $quip -replace '"', '\"' } else { '' }
   $fmLines += '[cover]'
   $fmLines += "  image = `"$coverRelative`""
   $fmLines += "  alt = `"$alt`""

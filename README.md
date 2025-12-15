@@ -25,12 +25,38 @@
 
 ### OpenAI API の設定
 
+#### AIモデルの設定（推奨）
+
+- `config/ai-model.json` でモデルを一元管理
+  - **GPT-5.1公開時は `defaultModel` を `"gpt-5.1"` に変更するだけで全体に反映**
+  - 各モデルのパラメータ（maxTokens, temperature）も設定可能
+
+```json
+{
+  "openai": {
+    "defaultModel": "gpt-4o",  // ← GPT-5.1公開後はここを "gpt-5.1" に変更
+    "models": {
+      "gpt-4o": { ... },
+      "gpt-5.1": { ... }
+    }
+  }
+}
+```
+
+#### 環境変数での設定（オプション）
+
 - 環境変数に API キーを設定: `setx OPENAI_API_KEY "sk-..."`
-- モデル指定は任意: `setx OPENAI_MODEL "gpt-5.1"`（未指定なら `gpt-5.1`）
+- モデル指定（設定ファイルより優先）: `setx OPENAI_MODEL "gpt-4o"`
 - もしくは、リポジトリ直下に `.env` を置く
   - 例:
     - `OPENAI_API_KEY=sk-...`
-    - `OPENAI_MODEL=gpt-5.1`
+    - `OPENAI_MODEL=gpt-4o`（省略時は設定ファイルの defaultModel を使用）
+
+#### 優先順位
+
+1. コマンドライン引数 `-Model`
+2. 環境変数 `OPENAI_MODEL`
+3. 設定ファイル `config/ai-model.json` の `defaultModel`
 
 ### Pexels（関連画像の自動取得）
 
@@ -66,7 +92,7 @@
   - リポジトリ Settings → Pages: Source を `Deploy from a branch` に設定し、Branch を `gh-pages` に（初回実行後に選択可能）
   - Settings → Secrets and variables → Actions → New repository secret で追加
     - `OPENAI_API_KEY`: OpenAIのAPIキー
-    - 任意 `OPENAI_MODEL`: 例 `gpt-5.1`
+    - 任意 `OPENAI_MODEL`: 環境変数でモデルを指定（省略時は `config/ai-model.json` の defaultModel を使用）
     - 任意 `PEXELS_API_KEY`: 関連画像（カバー）を自動取得したい場合
 
 - 手動実行（テスト）

@@ -7,6 +7,25 @@ import { constants } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
+async function loadAIModelConfig(repoRoot) {
+  const configPath = path.join(repoRoot, 'config', 'ai-model.json')
+  try {
+    const content = await readFile(configPath, 'utf8')
+    const config = JSON.parse(content)
+    const defaultModel = config.openai.defaultModel
+    const modelConfig = config.openai.models[defaultModel]
+    return {
+      defaultModel,
+      maxTokens: modelConfig.maxTokens,
+      temperature: modelConfig.temperature
+    }
+  } catch (e) {
+    console.warn('設定ファイルの読み込みに失敗:', e.message)
+    return { defaultModel: 'gpt-4o', maxTokens: 1600, temperature: 0.9 }
+  }
+}
+
+
 function formatTokyoParts(date = new Date()) {
   const fmt = new Intl.DateTimeFormat('ja-JP', {
     timeZone: 'Asia/Tokyo',
@@ -641,15 +660,18 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
 
   let { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, trend, mood, thanks, tomorrow } = buildOfflineDiary(dayInfo)
 
+  // AI設定の読み込み（優先順位: 環境変数 > 設定ファイル）
+  const aiConfig = await loadAIModelConfig(repoRoot)
   const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || 'gpt-5.1'
+  const model = process.env.OPENAI_MODEL || aiConfig.defaultModel
 
   if (apiKey) {
+    console.log(`使用モデル: ${model} (maxTokens: ${aiConfig.maxTokens}, temperature: ${aiConfig.temperature})`)
     try {
       const body = {
         model,
-        temperature: 0.9,
-        max_tokens: 1600,
+        temperature: aiConfig.temperature,
+        max_tokens: aiConfig.maxTokens,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: sys },
@@ -669,18 +691,18 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
       const content = data.choices?.[0]?.message?.content
       try {
         const parsed = JSON.parse(content)
-        if (parsed.quip)         quip = parsed.quip
-        if (parsed.work)         work = parsed.work
+        if (parsed.quip) quip = parsed.quip
+        if (parsed.work) work = parsed.work
         if (parsed.work_learning) workLearning = parsed.work_learning
-        if (parsed.money)        money = parsed.money
-        if (parsed.money_tip)    moneyTip = parsed.money_tip
-        if (parsed.parenting)    parenting = parsed.parenting
-        if (parsed.dad_points)   dadpt = parsed.dad_points
-        if (parsed.hobby)        hobby = parsed.hobby
-        if (parsed.trend)        trend = parsed.trend
-        if (parsed.mood)         mood = parsed.mood
-        if (parsed.thanks)       thanks = parsed.thanks
-        if (parsed.tomorrow)     tomorrow = parsed.tomorrow
+        if (parsed.money) money = parsed.money
+        if (parsed.money_tip) moneyTip = parsed.money_tip
+        if (parsed.parenting) parenting = parsed.parenting
+        if (parsed.dad_points) dadpt = parsed.dad_points
+        if (parsed.hobby) hobby = parsed.hobby
+        if (parsed.trend) trend = parsed.trend
+        if (parsed.mood) mood = parsed.mood
+        if (parsed.thanks) thanks = parsed.thanks
+        if (parsed.tomorrow) tomorrow = parsed.tomorrow
       } catch {
         console.warn('JSON parse failed for OpenAI content')
       }
