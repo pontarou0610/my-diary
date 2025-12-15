@@ -1,17 +1,35 @@
 {
   "openai": {
-    "defaultModel": "gpt-4o",
+    "defaultModel": "gpt-4o-mini",
     "models": {
-      "gpt-4o": {
-        "name": "gpt-4o",
-        "description": "現在のデフォルトモデル",
+      "gpt-4o-mini": {
+        "name": "gpt-4o-mini",
+        "description": "軽量・高速（デフォルト）",
         "maxTokens": 1600,
+        "temperature": 0.9
+      },
+      "gpt-4.1": {
+        "name": "gpt-4.1",
+        "description": "品質重視（利用可能なら優先候補）",
+        "maxTokens": 2000,
+        "temperature": 0.9
+      },
+      "gpt-5": {
+        "name": "gpt-5",
+        "description": "GPT-5（API公開後に使用可能）",
+        "maxTokens": 2200,
+        "temperature": 0.9
+      },
+      "gpt-5.2": {
+        "name": "gpt-5.2",
+        "description": "GPT-5.2（API公開後に使用可能）",
+        "maxTokens": 2200,
         "temperature": 0.9
       },
       "gpt-5.1": {
         "name": "gpt-5.1",
-        "description": "GPT-5.1 (API公開後に使用可能)",
-        "maxTokens": 2000,
+        "description": "GPT-5.1（API公開後に使用可能）",
+        "maxTokens": 2200,
         "temperature": 0.9
       }
     }
@@ -19,5 +37,5 @@
   "pexels": {
     "enabled": true
   },
-  "_comment": "GPT-5.1への移行方法: defaultModelを'gpt-5.1'に変更するだけです。詳細はdocs/GPT-5.1-migration.mdを参照してください。"
+  "_comment": "OPENAI_MODEL または OPENAI_PREFERRED_MODELS を設定すると、モデル選択を上書きできます。"
 }
