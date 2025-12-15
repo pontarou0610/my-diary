@@ -12,19 +12,65 @@ async function loadAIModelConfig(repoRoot) {
   try {
     const content = await readFile(configPath, 'utf8')
     const config = JSON.parse(content)
-    const defaultModel = config.openai.defaultModel
-    const modelConfig = config.openai.models[defaultModel]
+    const defaultModel = config?.openai?.defaultModel
+    const models = config?.openai?.models || {}
+    const modelConfig = models?.[defaultModel] || {}
     return {
       defaultModel,
-      maxTokens: modelConfig.maxTokens,
-      temperature: modelConfig.temperature
+      maxTokens: modelConfig.maxTokens ?? 1600,
+      temperature: modelConfig.temperature ?? 0.9,
+      models
     }
   } catch (e) {
     console.warn('設定ファイルの読み込みに失敗:', e.message)
-    return { defaultModel: 'gpt-4o', maxTokens: 1600, temperature: 0.9 }
+    return { defaultModel: 'gpt-4o-mini', maxTokens: 1600, temperature: 0.9, models: {} }
   }
 }
 
+const DEFAULT_PREFERRED_MODELS = [
+  'gpt-5.1',
+  'gpt-5.2',
+  'gpt-5',
+  'gpt-4.1',
+  'gpt-4o-mini'
+]
+
+function parsePreferredModelsEnv(raw) {
+  if (!raw) return []
+  const s = String(raw).trim()
+  if (!s) return []
+  try {
+    const parsed = JSON.parse(s)
+    if (Array.isArray(parsed)) return parsed.map(x => String(x).trim()).filter(Boolean)
+  } catch {
+    // ignore
+  }
+  return s
+    .split(/[\r\n,]+/g)
+    .map(x => x.trim())
+    .filter(Boolean)
+}
+
+function uniqueStrings(items) {
+  const seen = new Set()
+  const out = []
+  for (const x of items) {
+    const v = String(x || '').trim()
+    if (!v) continue
+    if (seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out
+}
+
+function buildModelCandidates(aiConfig) {
+  const envModel = (process.env.OPENAI_MODEL || '').trim()
+  const envPreferred = parsePreferredModelsEnv(process.env.OPENAI_PREFERRED_MODELS)
+  const configDefault = (aiConfig?.defaultModel || '').trim()
+  const base = envPreferred.length ? envPreferred : DEFAULT_PREFERRED_MODELS
+  return uniqueStrings([envModel, ...base, configDefault, 'gpt-4o-mini'])
+}
 
 function formatTokyoParts(date = new Date()) {
   const fmt = new Intl.DateTimeFormat('ja-JP', {
@@ -390,13 +436,84 @@ function decideSideJobPlan(dayInfo = null, rng = Math.random) {
   return { schoolJP, pdayJP, todaySJJP }
 }
 
-function pickTitle(yyyy, mm, dd, quip) {
+function pickTitle(yyyy, mm, dd, quip, dayInfo, work, parenting, hobby) {
   const base = `${yyyy}-${mm}-${dd} 日記`
+
+  // quipから具体的なキーワードを抽出
   const clean = maskPrivacy(quip).replace(/\s+/g, ' ').trim()
-  if (!clean) return base
-  let snippet = clean.slice(0, 20)
-  if (clean.length > 20) snippet += '…'
-  return `${base} - ${snippet}`
+
+  // 日記の主要テーマを抽出
+  const themes = []
+
+  // 曜日情報
+  if (dayInfo.weekdayJP === '金曜日') themes.push('金曜日')
+  if (dayInfo.weekdayJP === '土曜日') themes.push('土曜日')
+  if (dayInfo.weekdayJP === '日曜日') themes.push('日曜日')
+
+  // 仕事関連のキーワード
+  if (work && dayInfo.isWorkday) {
+    if (work.includes('会議')) themes.push('会議')
+    if (work.includes('リモート') || work.includes('在宅')) themes.push('在宅勤務')
+    if (work.includes('証券会社')) themes.push('証券会社')
+  }
+
+  // 日雇いバイト関連
+  if (work && work.includes('日雇い')) themes.push('日雇いバイト')
+  if (work && work.includes('バイト')) themes.push('バイト')
+
+  // 子育て関連
+  if (parenting) {
+    if (parenting.includes('聖太郎')) themes.push('受験')
+    if (parenting.includes('蓮子')) themes.push('吹奏楽')
+    if (parenting.includes('連次郎丸')) themes.push('不登校')
+  }
+
+  // 趣味関連
+  if (hobby && hobby.includes('ガンダム')) themes.push('ガンダム')
+
+  // 週末/祝日
+  if (dayInfo.isWeekend) themes.push('週末')
+  if (dayInfo.isHoliday) themes.push('祝日')
+
+  // quipから感情的なキーワードを抽出
+  const emotionalKeywords = []
+  if (clean.includes('充実')) emotionalKeywords.push('充実')
+  if (clean.includes('疲れ')) emotionalKeywords.push('疲労')
+  if (clean.includes('楽しい') || clean.includes('嬉しい')) emotionalKeywords.push('喜び')
+  if (clean.includes('家族')) emotionalKeywords.push('家族の絆')
+  if (clean.includes('感謝')) emotionalKeywords.push('感謝')
+
+  // タイトルを構築
+  let titleParts = []
+
+  // 主要テーマを2-3個選択
+  const selectedThemes = themes.slice(0, 2)
+  if (selectedThemes.length > 0) {
+    titleParts.push(selectedThemes.join('と'))
+  }
+
+  // 感情的なキーワードを追加
+  if (emotionalKeywords.length > 0) {
+    titleParts.push(emotionalKeywords[0])
+  }
+
+  // quipの一部を追加（短く）
+  if (clean && titleParts.length < 2) {
+    let snippet = clean.slice(0, 15)
+    if (clean.length > 15) snippet += '…'
+    titleParts.push(snippet)
+  }
+
+  // タイトルが空の場合はquipを使用
+  if (titleParts.length === 0) {
+    let snippet = clean.slice(0, 20)
+    if (clean.length > 20) snippet += '…'
+    return `${base} - ${snippet}`
+  }
+
+  // 最終的なタイトルを構築
+  const subtitle = titleParts.join('、')
+  return `${base} - ${subtitle}。`
 }
 
 function buildPexelsQuery(hobby, parenting, work, dayInfo) {
@@ -531,6 +648,27 @@ async function main() {
 妻はさっこ（専業主婦気質で浪費しがち）、子どもは3人（長男:聖太郎=高3で受験期・スーパーでバイト、長女:蓮子=高1で吹奏楽部・ファミレスでバイト、次男:連次郎丸=小5で不登校気味・Roblox好き）。
 趣味はスマホゲーム「機動戦士ガンダムUCエンゲージ」と、LINEマンガ/ピッコマの無料話を寝る前に読む程度。毎週どちらかの週末に日雇いのオフィス移転バイト。
 スタイル: 野原ひろし風の一人称「オレ」。庶民的でユーモラス、家族への愛情と弱音がちらつくが前向きに締める。
+
+【重要な品質基準】
+1. **具体的なエピソード**: 抽象的な表現を避け、具体的な出来事や会話を描写する
+   - 悪い例: 「会議があった」
+   - 良い例: 「『この数値の根拠は？』って矢継ぎ早に聞かれて、一瞬頭が真っ白になりかけた」
+
+2. **会話と心の声**: 実際の会話や心の中のつぶやきを多く入れる
+   - 「○○って言われて」「○○って思った」「○○って返した」などの表現を積極的に使う
+   - 家族や同僚との具体的な会話を再現する
+
+3. **感情描写**: 感じたことを具体的に表現する
+   - 「ちょっと嬉しかった」「思わずガッツポーズしそうになった」「こっちまで嬉しくなった」など
+   - 感情の変化を丁寧に描く
+
+4. **五感を使った描写**: 見た、聞いた、感じたことを具体的に
+   - 「息が白く見えるくらい寒かった」「レジで『ポイント10倍デーですよ』って言われて」など
+
+5. **読者が共感できる内容**: 日常の小さな喜びや悩みを丁寧に描く
+   - 家計の工夫、子育ての悩み、仕事の達成感など
+   - 「あるある」と思える内容を意識する
+
 前提:
 - 日付: ${yyyy}-${mm}-${dd}（${weekdayJP} / ${dayInfo.dayKindJP}）。本業: ${dayInfo.isWorkday ? '通常勤務あり' : '休み（本業ネタは控えめ）'}。
 - サイドジョブ予定: 学校行事 ${schoolJP}、日雇い予定日: ${pdayJP}、今日が日雇い当日: ${todaySJJP}。
@@ -539,59 +677,79 @@ async function main() {
 - 平日は仕事の学びを具体に1つ深掘り。冒頭ひとことで天気/体調/予定を触れる。
 - 季節・天気・匂い・音・家事の手触りなど具体物を散らし、固有名詞や住所はぼかす。
 - 同じ書き出しや文末を避け、会話・内省・レビューなど表現パターンを交互に使ってマンネリを防ぐ。
-- 文字数: 本文トータルおおよそ2000〜2400文字。句点や読点で適度に改行し読みやすく。
+- 文字数: 本文トータルおおよそ2500〜3000文字。各セクションを充実させ、読み応えのある内容にする。
 - その日のトレンド（ジャンル不問）への短い所感を1つ入れる。
+
+【各セクションの書き方ガイド】
+- work: 具体的な会議の様子、同僚との会話、仕事中の心の声を含める（3-5段落）
+- work_learning: 具体的な学びを詳しく説明し、なぜそう思ったかの背景も含める
+- money: 買い物の具体的なシーン、価格、ポイント、家計簿アプリの様子など（3-4段落）
+- money_tip: 実践している具体的な方法を詳しく説明する
+- parenting: 各子どもとの具体的な会話や様子を描写（3-5段落）
+- dad_points: 父親として意識したことの具体例を含める
+- hobby: ゲームやマンガの具体的な内容、感想を含める（2-3段落）
+- trend: トレンドについての具体的な感想や家族との会話を含める（2-3段落）
+
 Hugoブログ用に、以下のJSON schemaで出力（目安は調整可）:
 {
-  "quip": "今日のひとこと。天気や体調、日雇い予定（学校行事: ${schoolJP}, 日雇い予定日: ${pdayJP}, 今日が日雇い当日: ${todaySJJP}）を絡める",
-  "work": "仕事。リモート勤務、会議、業務、仕事仲間とのやりとりなど。土日祝は本業控えめ",
-  "work_learning": "仕事からの学び。休みの日は次に試したいことでも可",
-  "money": "お金。家計、教育費、日用品、節約/買い物、バイト代の使い道など",
-  "money_tip": "お金に関する気づきやミニTips",
-  "parenting": "子育て。長男・長女・次男の様子や悩み、夫婦のやりとりも含めて",
-  "dad_points": "父親として意識したいこと",
-  "hobby": "趣味。ガンダムUCエンゲージ、漫画（LINEマンガ/ピッコマ）、音楽など",
-  "trend": "その日のトレンドへの一言所感（ニュース/ネット/買い物/地域などジャンル不問）",
+  "quip": "今日のひとこと。天気や体調、日雇い予定（学校行事: ${schoolJP}, 日雇い予定日: ${pdayJP}, 今日が日雇い当日: ${todaySJJP}）を絡める。3-4行で具体的に",
+  "work": "仕事。リモート勤務、会議、業務、仕事仲間とのやりとりなど。土日祝は本業控えめ。具体的な会話や心の声を含めて3-5段落で",
+  "work_learning": "仕事からの学び。休みの日は次に試したいことでも可。具体的な背景と理由を含めて詳しく",
+  "money": "お金。家計、教育費、日用品、節約/買い物、バイト代の使い道など。具体的なシーンや金額、ポイントなどを含めて3-4段落で",
+  "money_tip": "お金に関する気づきやミニTips。実践している具体的な方法を詳しく",
+  "parenting": "子育て。長男・長女・次男の様子や悩み、夫婦のやりとりも含めて。各子どもとの具体的な会話を含めて3-5段落で",
+  "dad_points": "父親として意識したいこと。具体的なエピソードを含めて",
+  "hobby": "趣味。ガンダムUCエンゲージ、漫画（LINEマンガ/ピッコマ）、音楽など。具体的な内容や感想を含めて2-3段落で",
+  "trend": "その日のトレンドへの一言所感（ニュース/ネット/買い物/地域などジャンル不問）。具体的な感想や家族との会話を含めて2-3段落で",
   "mood": "気分。0〜10で数値。整数",
-  "thanks": "感謝",
-  "tomorrow": "明日の一言"
+  "thanks": "感謝。具体的な状況や感じたことを含めて",
+  "tomorrow": "明日の一言。具体的な予定や目標を含めて"
 }
 JSONだけを出力する。文章トーンは野原ひろし風の口調で、家族への愛情をさりげなくにじませて。
+各セクションは具体的なエピソード、会話、感情描写を豊富に含め、読者が「あるある」と共感できる内容にすること。
 `
-  const userPrompt = '上記JSON schemaどおりに、JSONだけで返してください。'
+  const userPrompt = '上記JSON schemaどおりに、JSONだけで返してください。各セクションは具体的なエピソード、会話、感情描写を豊富に含めてください。'
 
   let { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, trend, mood, thanks, tomorrow } = buildOfflineDiary(dayInfo)
 
   // AI設定の読み込み（優先順位: 環境変数 > 設定ファイル）
   const aiConfig = await loadAIModelConfig(repoRoot)
   const apiKey = process.env.OPENAI_API_KEY
-  const model = process.env.OPENAI_MODEL || aiConfig.defaultModel
+  const modelCandidates = buildModelCandidates(aiConfig)
 
   if (apiKey) {
-    console.log(`使用モデル: ${model} (maxTokens: ${aiConfig.maxTokens}, temperature: ${aiConfig.temperature})`)
-    try {
-      const body = {
-        model,
-        temperature: aiConfig.temperature,
-        max_tokens: aiConfig.maxTokens,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: sys },
-          { role: 'user', content: userPrompt }
-        ]
-      }
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      })
-      if (!resp.ok) throw new Error(`OpenAI HTTP ${resp.status}`)
-      const data = await resp.json()
-      const content = data.choices?.[0]?.message?.content
+    let usedModel = null
+    let lastErr = null
+
+    for (const model of modelCandidates) {
+      const perModelCfg = aiConfig.models?.[model] || {}
+      const maxTokens = perModelCfg.maxTokens ?? aiConfig.maxTokens
+      const temperature = perModelCfg.temperature ?? aiConfig.temperature
+
       try {
+        const body = {
+          model,
+          temperature,
+          max_tokens: maxTokens,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: userPrompt }
+          ]
+        }
+        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        })
+        if (!resp.ok) throw new Error(`OpenAI HTTP ${resp.status}`)
+        const data = await resp.json()
+        const content = data.choices?.[0]?.message?.content
+        if (!content) throw new Error('OpenAI content empty')
+
         const parsed = JSON.parse(content)
         if (parsed.quip) quip = parsed.quip
         if (parsed.work) work = parsed.work
@@ -605,11 +763,17 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
         if (parsed.mood) mood = parsed.mood
         if (parsed.thanks) thanks = parsed.thanks
         if (parsed.tomorrow) tomorrow = parsed.tomorrow
-      } catch {
-        console.warn('JSON parse failed for OpenAI content')
+
+        usedModel = model
+        console.log(`使用モデル: ${usedModel} (maxTokens: ${maxTokens}, temperature: ${temperature})`)
+        break
+      } catch (e) {
+        lastErr = e
       }
-    } catch (e) {
-      console.warn('OpenAI生成に失敗:', e.message)
+    }
+
+    if (!usedModel) {
+      console.warn('OpenAI生成に失敗:', lastErr?.message || 'unknown error')
     }
   } else {
     console.warn('OPENAI_API_KEY 未設定。テンプレートを使用します。')
@@ -645,13 +809,57 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
     }
   }
 
-  const title = pickTitle(yyyy, mm, dd, quip)
+  // タグを動的に生成
+  function generateTags(dayInfo, work, parenting, hobby, money) {
+    const tags = ['日記', '仕事', 'お金', '子育て', '趣味']
+
+    // 曜日関連のタグ
+    if (dayInfo.weekdayJP === '金曜日') tags.push('金曜日')
+    if (dayInfo.weekdayJP === '土曜日') tags.push('土曜日')
+    if (dayInfo.weekdayJP === '日曜日') tags.push('日曜日')
+
+    // 仕事関連のタグ
+    if (work && dayInfo.isWorkday) {
+      if (work.includes('リモート') || work.includes('在宅')) tags.push('在宅勤務', 'リモートワーク')
+      if (work.includes('会議')) tags.push('会議')
+    }
+
+    // 日雇いバイト関連
+    if (work && work.includes('日雇い')) tags.push('日雇いバイト', '副業')
+
+    // 週末/祝日
+    if (dayInfo.isWeekend) tags.push('週末')
+    if (dayInfo.isHoliday) tags.push('祝日')
+
+    // 家計管理関連
+    if (money && (money.includes('節約') || money.includes('家計') || money.includes('ポイント'))) {
+      tags.push('家計管理')
+    }
+
+    // 子育て関連
+    if (parenting) {
+      if (parenting.includes('聖太郎')) tags.push('受験')
+      if (parenting.includes('蓮子')) tags.push('吹奏楽')
+      if (parenting.includes('連次郎丸')) tags.push('不登校')
+    }
+
+    // 趣味関連
+    if (hobby && hobby.includes('ガンダム')) tags.push('ガンダム')
+
+    // 重複を削除して返す
+    return [...new Set(tags)]
+  }
+
+  const title = pickTitle(yyyy, mm, dd, quip, dayInfo, work, parenting, hobby)
+  const tags = generateTags(dayInfo, work, parenting, hobby, money)
+  const tagsStr = tags.map(t => `"${t}"`).join(', ')
+
   const fmLines = [
     '+++',
     `title = "${title}"`,
     `date = ${yyyy}-${mm}-${dd}T22:00:00+09:00`,
     `draft = ${draft}`,
-    'tags = ["日記", "仕事", "お金", "子育て", "趣味"]',
+    `tags = [${tagsStr}]`,
     'categories = ["日常"]'
   ]
   if (coverRel) {
