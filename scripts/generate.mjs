@@ -69,7 +69,45 @@ function buildModelCandidates(aiConfig) {
   const envPreferred = parsePreferredModelsEnv(process.env.OPENAI_PREFERRED_MODELS)
   const configDefault = (aiConfig?.defaultModel || '').trim()
   const base = envPreferred.length ? envPreferred : DEFAULT_PREFERRED_MODELS
-  return uniqueStrings([envModel, ...base, configDefault, 'gpt-4o-mini'])
+  return uniqueStrings([envModel, configDefault, ...base, 'gpt-4o-mini'])
+}
+
+function stripJsonCodeFences(s) {
+  const text = String(s || '').trim()
+  if (!text) return ''
+  const m = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+  return m ? m[1].trim() : text
+}
+
+function tryParseJsonObject(s) {
+  const text = stripJsonCodeFences(s)
+  if (!text) return { ok: false, error: new Error('empty content') }
+  try {
+    return { ok: true, value: JSON.parse(text) }
+  } catch (e) {
+    // Try to recover when the model adds a preface/suffix
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        return { ok: true, value: JSON.parse(text.slice(start, end + 1)) }
+      } catch {
+        // fall through
+      }
+    }
+    return { ok: false, error: e }
+  }
+}
+
+async function readResponseBody(resp) {
+  const contentType = resp.headers?.get?.('content-type') || ''
+  const raw = await resp.text()
+  if (!raw) return { raw: '', json: null, contentType }
+  try {
+    return { raw, json: JSON.parse(raw), contentType }
+  } catch {
+    return { raw, json: null, contentType }
+  }
 }
 
 function formatTokyoParts(date = new Date()) {
@@ -723,34 +761,60 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
 
     for (const model of modelCandidates) {
       const perModelCfg = aiConfig.models?.[model] || {}
-      const maxTokens = perModelCfg.maxTokens ?? aiConfig.maxTokens
+      const baseMaxTokens = perModelCfg.maxTokens ?? aiConfig.maxTokens
       const temperature = perModelCfg.temperature ?? aiConfig.temperature
 
       try {
-        const body = {
-          model,
-          temperature,
-          max_tokens: maxTokens,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: sys },
-            { role: 'user', content: userPrompt }
-          ]
-        }
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(body)
-        })
-        if (!resp.ok) throw new Error(`OpenAI HTTP ${resp.status}`)
-        const data = await resp.json()
-        const content = data.choices?.[0]?.message?.content
-        if (!content) throw new Error('OpenAI content empty')
+        let attempt = 0
+        let maxTokens = baseMaxTokens
 
-        const parsed = JSON.parse(content)
+        while (attempt < 2) {
+          attempt++
+          const body = {
+            model,
+            temperature,
+            max_tokens: maxTokens,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: sys },
+              { role: 'user', content: userPrompt }
+            ]
+          }
+          const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+          })
+
+          const { raw, json } = await readResponseBody(resp)
+          if (!resp.ok) {
+            const msg = json?.error?.message || raw?.slice(0, 400) || '(empty response body)'
+            throw new Error(`OpenAI HTTP ${resp.status}: ${msg}`)
+          }
+          if (!json) throw new Error('OpenAI returned non-JSON response')
+
+          const choice = json.choices?.[0]
+          const content = choice?.message?.content
+          if (!content) throw new Error('OpenAI content empty')
+
+          const parsedJson = tryParseJsonObject(content)
+          if (!parsedJson.ok) {
+            const finish = choice?.finish_reason
+            const looksTruncated =
+              /Unexpected end of JSON input/i.test(parsedJson.error?.message || '') ||
+              (typeof content === 'string' && content.trim().startsWith('{') && !content.trim().endsWith('}')) ||
+              finish === 'length'
+            if (looksTruncated && attempt < 2) {
+              maxTokens = Math.min(Math.max(maxTokens * 2, 4096), 8192)
+              continue
+            }
+            throw parsedJson.error
+          }
+
+          const parsed = parsedJson.value
         if (parsed.quip) quip = parsed.quip
         if (parsed.work) work = parsed.work
         if (parsed.work_learning) workLearning = parsed.work_learning
@@ -765,8 +829,10 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
         if (parsed.tomorrow) tomorrow = parsed.tomorrow
 
         usedModel = model
-        console.log(`使用モデル: ${usedModel} (maxTokens: ${maxTokens}, temperature: ${temperature})`)
-        break
+          console.log(`使用モデル: ${usedModel} (maxTokens: ${maxTokens}, temperature: ${temperature})`)
+          break
+        }
+        if (usedModel) break
       } catch (e) {
         lastErr = e
       }

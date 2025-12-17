@@ -3,33 +3,23 @@
     "defaultModel": "gpt-4o-mini",
     "models": {
       "gpt-4o-mini": {
-        "name": "gpt-4o-mini",
-        "description": "軽量・高速（デフォルト）",
-        "maxTokens": 1600,
+        "maxTokens": 4096,
         "temperature": 0.9
       },
       "gpt-4.1": {
-        "name": "gpt-4.1",
-        "description": "品質重視（利用可能なら優先候補）",
-        "maxTokens": 2000,
+        "maxTokens": 4096,
         "temperature": 0.9
       },
       "gpt-5": {
-        "name": "gpt-5",
-        "description": "GPT-5（API公開後に使用可能）",
-        "maxTokens": 2200,
-        "temperature": 0.9
-      },
-      "gpt-5.2": {
-        "name": "gpt-5.2",
-        "description": "GPT-5.2（API公開後に使用可能）",
-        "maxTokens": 2200,
+        "maxTokens": 4096,
         "temperature": 0.9
       },
       "gpt-5.1": {
-        "name": "gpt-5.1",
-        "description": "GPT-5.1（API公開後に使用可能）",
-        "maxTokens": 2200,
+        "maxTokens": 4096,
+        "temperature": 0.9
+      },
+      "gpt-5.2": {
+        "maxTokens": 4096,
         "temperature": 0.9
       }
     }
@@ -37,5 +27,5 @@
   "pexels": {
     "enabled": true
   },
-  "_comment": "OPENAI_MODEL または OPENAI_PREFERRED_MODELS を設定すると、モデル選択を上書きできます。"
+  "_comment": "OPENAI_MODEL または OPENAI_PREFERRED_MODELS でモデル優先順位を上書きできます。maxTokens を増やすと JSON 途中切れを防げます。"
 }
