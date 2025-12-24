@@ -127,6 +127,59 @@ function Get-PexelsQuery {
   return $q
 }
 
+function Compress-OneLine {
+  param(
+    [string]$Text,
+    [int]$MaxLen = 220
+  )
+  if (-not $Text) { return '' }
+  $s = ($Text -replace '\s+', ' ').Trim()
+  if ($s.Length -le $MaxLen) { return $s }
+  return $s.Substring(0, $MaxLen) + '…'
+}
+
+function Get-RecentDiaryContinuity {
+  param(
+    [string]$RepoRoot,
+    [datetime]$Date,
+    [int]$MaxDaysBack = 21
+  )
+
+  for ($i = 1; $i -le $MaxDaysBack; $i++) {
+    $d = $Date.AddDays(-$i)
+    $rel = $d.ToString('yyyy/MM/dd')
+    $slug = $d.ToString('yyyy-MM-dd')
+    $candidate = Join-Path $RepoRoot (Join-Path 'content/posts' (Join-Path $rel "$slug.md"))
+    if (-not (Test-Path $candidate)) { continue }
+
+    $md = Get-Content -Raw -Encoding UTF8 -Path $candidate
+    $body = [regex]::Replace($md, '(?s)^\+\+\+.*?\+\+\+\s*', '')
+
+    $quip = ''
+    if ($body -match '(?s)今日のひとこと:\s*(.*?)(?:\r?\n##\s|\z)') { $quip = $matches[1] }
+
+    $parenting = ''
+    if ($body -match '(?s)##\s*子育て\s*(.*?)(?:\r?\n##\s|\z)') { $parenting = $matches[1] }
+
+    $tomorrow = ''
+    if ($body -match '(?m)^-\s*明日の(?:一手|一言)\s*[:：]\s*(.+)$') { $tomorrow = $matches[1] }
+
+    $avoidRoblox = [bool]($body -match '(?i)roblox')
+    $avoidKidPartTime = [bool]($body -match '(?s)(聖太郎|蓮子).*?バイト|スーパー.*?バイト|ファミレス.*?バイト')
+
+    return [pscustomobject]@{
+      Date            = $d.ToString('yyyy-MM-dd')
+      Quip            = (Compress-OneLine -Text $quip -MaxLen 220)
+      Parenting       = (Compress-OneLine -Text $parenting -MaxLen 240)
+      Tomorrow        = (Compress-OneLine -Text $tomorrow -MaxLen 160)
+      AvoidRoblox     = $avoidRoblox
+      AvoidKidPartTime = $avoidKidPartTime
+    }
+  }
+
+  return $null
+}
+
 # ===== パス設定 =====
 $root = Split-Path -Parent $PSScriptRoot
 $rel = $Date.ToString('yyyy/MM/dd')
@@ -144,12 +197,37 @@ $pdayJP = if ($plan.PlannedSideJobDay -eq 'Saturday') { '土曜' } elseif ($plan
 $todaySJ = if ($plan.IsTodaySideJob) { 'はい' } else { 'いいえ' }
 $weekdayJP = Get-WeekdayJP -D $Date
 
+$recentDiary = Get-RecentDiaryContinuity -RepoRoot $root -Date $Date
+$continuityBlock = ''
+if ($recentDiary) {
+  $avoid = @()
+  if ($recentDiary.AvoidRoblox) { $avoid += 'Roblox' }
+  if ($recentDiary.AvoidKidPartTime) { $avoid += '子どものバイト' }
+
+  $lines = @(
+    '【直近日記メモ（矛盾防止・ネタ被り回避用 / 本文に日付は書かない）】',
+    '- 直近（前回）'
+  )
+  if ($recentDiary.Quip) { $lines += "  - 今日のひとこと: $($recentDiary.Quip)" }
+  if ($recentDiary.Parenting) { $lines += "  - 子育て: $($recentDiary.Parenting)" }
+  if ($recentDiary.Tomorrow) { $lines += "  - 前回の「明日の一手/一言」: $($recentDiary.Tomorrow)" }
+  if ($avoid.Count -gt 0) {
+    $lines += "- 今日は「$($avoid -join ' / ')」が連日にならないように、できるだけ避ける（触れるなら一言だけ）"
+  }
+  $continuityBlock = ($lines -join "`n")
+}
+
 $sys = @"
 あなたは40代の会社員「ぽん次郎」。SES勤務で証券会社に常駐だがフルリモート。妻はさっこ（専業主婦寄り）。家計管理はぽん次郎が手動で、さっこは家計簿をつけず、ファッションなど好きなものにお金を使いがちな浪費家。子どもは3人。長男:聖太郎（高3・大学受験予定だが成績が足りず不安。スーパーでアルバイト中）、長女:蓮子（高1・吹奏楽部。あんさんぶるスターズが好きでファミレスでバイト中）、次男:連次郎丸（小3・不登校気味でRobloxに夢中）。趣味はスマホゲーム「機動戦士ガンダムUCエンゲージ」と、LINEマンガ/ピッコマの無料話を寝る前に読む程度。本業だけでは生活が厳しいため、毎週土曜か日曜のどちらかで日雇いのオフィス移転作業のバイトをしている。肩の力が抜けた口語で、所々に小ネタを挟み、生活の具体物（天気・家事・音・匂い）を織り交ぜる。固有名詞や正確な地名はぼかす。旬なトレンド（ニュース/ネット話題/季節の行事）を軽く一言まぶす。
 スタイル: 野原ひろし風の一人称「オレ」。庶民的でユーモラス、家族への愛情と弱音がちらつくが、最終的には前向きに落とす。
 今日の日付: $($Date.ToString('yyyy-MM-dd'))（$weekdayJP）。日付・曜日・「明日」「週末」「来週」などの表現が矛盾しないよう整合を取る。
 SEO を意識して、冒頭や各セクションの前半にその日のテーマ・キーワード（天気/体調/日雇い/子育て/趣味/お金）が自然に入るように書く。見出し直下で要点を一言入れて検索で拾われやすくする。
 毎日同じ雰囲気にならないよう、日替わりで焦点を変える（例: 仕事の日は学び深掘り、家族の日は会話描写多め、趣味の日はレビューっぽく、金曜日は週末準備など）か、切り出し方を変えて一言めを変化させる。
+直近日記がある場合は内容と矛盾させない（必要なら「昨日の続き」を1文だけ回収。本文に日付は書かない）。
+子育ては毎日「3人フル出演」前提にしない。主役は1人を深掘りし、他の子は一言でもOK（毎日バイト/毎日Robloxにならない頻度感を守る）。
+
+$continuityBlock
+
 文章は句点（。や！や？）で適度に改行し、読みやすさを優先する。
 分量: 日記全体をおおよそ 2000〜2400 文字程度にする。
 Hugoブログ用に、以下のJSON schemaで出力する（各フィールドは目安で調整可）。
@@ -159,7 +237,7 @@ Hugoブログ用に、以下のJSON schemaで出力する（各フィールド�
   "work_learning": "仕事からの学び",
   "money": "お金。家計、教育費、日用品、節約や買い物、バイト代の使い道など",
   "money_tip": "お金に関する気づき・ミニTips",
-  "parenting": "子育て。長男・長女・次男の様子や悩み、夫婦のやりとりも含めて",
+  "parenting": "子育て。主役の子どもとの具体的な会話を中心に。他の子は近況を1～2文でOK。夫婦のやりとりも混ぜる（毎日バイト/毎日Robloxにならない頻度感を守る）",
   "dad_points": "父親として意識したいこと",
   "hobby": "趣味。ガンダムUCエンゲージ、漫画（LINEマンガ/ピッコマ）、音楽など",
   "mood": "気分。0〜10で数値。整数",

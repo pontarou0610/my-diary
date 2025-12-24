@@ -325,6 +325,114 @@ async function resolvePostInfo(repoRoot, dateKey) {
   return { dateKey, title, relLink, absFile }
 }
 
+function stripTomlFrontMatter(md) {
+  const text = String(md || '').replace(/\r\n/g, '\n').trim()
+  if (!text) return ''
+  const lines = text.split('\n')
+  if (lines[0]?.trim() !== '+++') return text
+  const end = lines.slice(1).findIndex(l => l.trim() === '+++')
+  if (end === -1) return text
+  return lines.slice(end + 2).join('\n').trim()
+}
+
+function compactForPrompt(text, maxLen = 240) {
+  const s = String(text || '').replace(/\r\n/g, '\n').trim()
+  if (!s) return ''
+  const oneLine = s.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (oneLine.length <= maxLen) return oneLine
+  return oneLine.slice(0, maxLen).trim() + '…'
+}
+
+function extractQuipBlockFromPostBody(postBody) {
+  const text = String(postBody || '').replace(/\r\n/g, '\n')
+  const marker = '今日のひとこと:'
+  const idx = text.indexOf(marker)
+  if (idx === -1) return ''
+  let start = idx + marker.length
+  while (start < text.length && (text[start] === ' ' || text[start] === '\t')) start++
+  const next = text.indexOf('\n## ', start)
+  const end = next === -1 ? text.length : next
+  return text.slice(start, end).trim()
+}
+
+function extractMarkdownSectionFromPostBody(postBody, heading) {
+  const text = String(postBody || '').replace(/\r\n/g, '\n')
+  const marker = `## ${heading}\n`
+  const idx = text.indexOf(marker)
+  if (idx === -1) return ''
+  let start = idx + marker.length
+  if (text[start] === '\n') start++
+  const next = text.indexOf('\n## ', start)
+  const end = next === -1 ? text.length : next
+  return text.slice(start, end).trim()
+}
+
+function extractTomorrowFromPostBody(postBody) {
+  const text = String(postBody || '')
+  const m = text.match(/^\-\s*明日の(?:一言|一手)\s*[:：]\s*(.+)$/m)
+  return m ? m[1].trim() : ''
+}
+
+async function readDiaryPostForContinuity(repoRoot, dateKey) {
+  const [yyyy, mm, dd] = dateKey.split('-')
+  const absFile = path.join(repoRoot, 'content', 'posts', yyyy, mm, dd, `${dateKey}.md`)
+  if (!(await fileExists(absFile))) return null
+  const md = await readFile(absFile, 'utf8')
+  const body = stripTomlFrontMatter(md)
+  const quip = compactForPrompt(extractQuipBlockFromPostBody(body), 220)
+  const parenting = compactForPrompt(extractMarkdownSectionFromPostBody(body, '子育て'), 240)
+  const tomorrow = compactForPrompt(extractTomorrowFromPostBody(body), 160)
+  return { dateKey, absFile, body, quip, parenting, tomorrow }
+}
+
+async function collectRecentDiaryContinuity(repoRoot, dateKey, maxEntries = 3, maxDaysBack = 21) {
+  const [yyyy, mm, dd] = dateKey.split('-').map(Number)
+  let cursor = utcDateFromParts(yyyy, mm, dd)
+  const out = []
+  for (let i = 0; i < maxDaysBack && out.length < maxEntries; i++) {
+    cursor = new Date(cursor.getTime() - 86400000)
+    const dk = dateKeyFromDateUTC(cursor)
+    const entry = await readDiaryPostForContinuity(repoRoot, dk)
+    if (entry) out.push(entry)
+  }
+  return out
+}
+
+function analyzeDiaryRepetition(entries) {
+  const sample = (entries || []).slice(0, 3)
+  const robloxRe = /roblox/i
+  const kidPartTimeRe = /(聖太郎|蓮子)[\s\S]{0,60}バイト|スーパー[\s\S]{0,60}バイト|ファミレス[\s\S]{0,60}バイト/
+
+  const robloxCount = sample.filter(e => robloxRe.test(e.body)).length
+  const kidPartTimeCount = sample.filter(e => kidPartTimeRe.test(e.body)).length
+
+  const last = sample[0]
+  return {
+    avoidRoblox: Boolean(last && (robloxRe.test(last.body) || robloxCount >= 2)),
+    avoidKidPartTime: Boolean(last && (kidPartTimeRe.test(last.body) || kidPartTimeCount >= 2))
+  }
+}
+
+function buildDiaryContinuityPrompt(entries, repetition) {
+  if (!entries || entries.length === 0) return ''
+  const latest = entries[0]
+  const avoid = []
+  if (repetition?.avoidRoblox) avoid.push('Roblox')
+  if (repetition?.avoidKidPartTime) avoid.push('子どものバイト')
+
+  const lines = [
+    '【直近日記メモ（矛盾防止・ネタ被り回避用 / 本文に日付は書かない）】',
+    '- 直近（前回）',
+    latest.quip ? `  - 今日のひとこと: ${latest.quip}` : null,
+    latest.parenting ? `  - 子育て: ${latest.parenting}` : null,
+    latest.tomorrow ? `  - 前回の「明日の一手/一言」: ${latest.tomorrow}` : null,
+    avoid.length
+      ? `- 今日は「${avoid.join(' / ')}」が連日にならないように、できるだけ避ける（触れるなら一言だけ）`
+      : null
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
 function rangeDatesUTC(startUTC, endUTC) {
   const out = []
   const cursor = new Date(startUTC)
@@ -562,7 +670,7 @@ function buildPexelsQuery(hobby, parenting, work, dayInfo) {
   return query || '東京 日常 家庭'
 }
 
-function buildOfflineDiary(dayInfo) {
+function buildOfflineDiary(dayInfo, options = {}) {
   const seed = seedFromDateKey(dayInfo.dateKey) ^ 0x5bf03635
   const rng = makeSeededRandom(seed)
   const weather = [
@@ -626,13 +734,17 @@ function buildOfflineDiary(dayInfo) {
     'レシート撮影は帰宅後5分以内に済ませる', '現金払いは1日1回までと決めると無駄遣いが減る', '欲しい物は翌朝まで寝かせてから買う', '送料無料に釣られず総額を見る', 'クーポンは使う日を決めておく']
   )
 
-  const parenting = pickFrom(rng, [
+  const parentingCandidates = [
     '聖太郎は模試の復習で机にかじりつき。夜に軽く声をかけて様子見', '蓮子は吹奏楽の新曲でテンション高め。バイトの愚痴も少し聞いた',
     '連次郎丸はRoblox三昧。30分だけ一緒にプレイして区切りを作った', '家族で夕飯のメニューを決める会議を開催。意外と盛り上がる',
     '兄弟で動画を観て爆笑。音量だけは要調整', 'さっこが見つけたレシピで晩ご飯づくりを手伝った', '次男のゲーム時間を一緒にタイマーで区切った',
     'テスト前の聖太郎に夜食を差し入れ', '蓮子のバイト帰宅に合わせて風呂を温めておいた', '家族でゴミ出し当番をローテして負担分散',
     '進路の話を10分だけ真面目にした', '学校のプリント整理を一緒に片付けた', '子どものスマホ時間を一緒に管理した', '家族LINEで明日の予定を共有した'
-  ])
+  ]
+  let parentingPool = parentingCandidates
+  if (options.avoidRoblox) parentingPool = parentingPool.filter(x => !/roblox/i.test(x))
+  if (options.avoidKidPartTime) parentingPool = parentingPool.filter(x => !/バイト/.test(x))
+  const parenting = pickFrom(rng, parentingPool.length ? parentingPool : parentingCandidates)
   const dadpt = pickFrom(rng, [
     '短時間でも長男の勉強に付き添う', '笑わせ役を買って出て家の空気を柔らかくする', '連次郎丸のゲームタイムを一緒に区切る',
     '蓮子の話を遮らず最後まで聞く', 'さっこの愚痴をまず受け止める', '寝る前に5分だけでも子どもと対話',
@@ -681,6 +793,11 @@ async function main() {
   const sjRng = makeSeededRandom(seedFromDateKey(dayInfo.dateKey) ^ 0x13572468)
   const { schoolJP, pdayJP, todaySJJP } = decideSideJobPlan(dayInfo, sjRng)
 
+  const recentEntries = await collectRecentDiaryContinuity(repoRoot, dayInfo.dateKey)
+  const repetition = analyzeDiaryRepetition(recentEntries)
+  const continuityPrompt = buildDiaryContinuityPrompt(recentEntries, repetition)
+  const continuityBlock = continuityPrompt ? `\n${continuityPrompt}\n` : ''
+
   const sys = `
 あなたは40代の会社員「ぽん次郎」。SESで証券会社に常駐しているがフルリモート。
 妻はさっこ（専業主婦気質で浪費しがち）、子どもは3人（長男:聖太郎=高3で受験期・スーパーでバイト、長女:蓮子=高1で吹奏楽部・ファミレスでバイト、次男:連次郎丸=小5で不登校気味・Roblox好き）。
@@ -715,15 +832,19 @@ async function main() {
 - 平日は仕事の学びを具体に1つ深掘り。冒頭ひとことで天気/体調/予定を触れる。
 - 季節・天気・匂い・音・家事の手触りなど具体物を散らし、固有名詞や住所はぼかす。
 - 同じ書き出しや文末を避け、会話・内省・レビューなど表現パターンを交互に使ってマンネリを防ぐ。
+- 直近日記がある場合は内容と矛盾させない（必要なら「昨日の続き」を1文だけ回収。本文に日付は書かない）。
+- 子育ては毎日「3人フル出演」前提にしない。主役は1人を深掘りし、他の子は一言でもOK（毎日バイト/毎日Robloxにならない頻度感を守る）。
 - 文字数: 本文トータルおおよそ2500〜3000文字。各セクションを充実させ、読み応えのある内容にする。
 - その日のトレンド（ジャンル不問）への短い所感を1つ入れる。
+
+${continuityBlock}
 
 【各セクションの書き方ガイド】
 - work: 具体的な会議の様子、同僚との会話、仕事中の心の声を含める（3-5段落）
 - work_learning: 具体的な学びを詳しく説明し、なぜそう思ったかの背景も含める
 - money: 買い物の具体的なシーン、価格、ポイント、家計簿アプリの様子など（3-4段落）
 - money_tip: 実践している具体的な方法を詳しく説明する
-- parenting: 各子どもとの具体的な会話や様子を描写（3-5段落）
+- parenting: 子どもの出来事。主役は1人を深掘り（会話あり）し、他の子は近況を短く触れる程度でOK（3-5段落）
 - dad_points: 父親として意識したことの具体例を含める
 - hobby: ゲームやマンガの具体的な内容、感想を含める（2-3段落）
 - trend: トレンドについての具体的な感想や家族との会話を含める（2-3段落）
@@ -735,7 +856,7 @@ Hugoブログ用に、以下のJSON schemaで出力（目安は調整可）:
   "work_learning": "仕事からの学び。休みの日は次に試したいことでも可。具体的な背景と理由を含めて詳しく",
   "money": "お金。家計、教育費、日用品、節約/買い物、バイト代の使い道など。具体的なシーンや金額、ポイントなどを含めて3-4段落で",
   "money_tip": "お金に関する気づきやミニTips。実践している具体的な方法を詳しく",
-  "parenting": "子育て。長男・長女・次男の様子や悩み、夫婦のやりとりも含めて。各子どもとの具体的な会話を含めて3-5段落で",
+  "parenting": "子育て。主役の子どもとの具体的な会話を中心に（3-5段落）。他の子は近況を1～2文でOK。夫婦のやりとりも混ぜる（毎日バイト/毎日Robloxにならない頻度感を守る）",
   "dad_points": "父親として意識したいこと。具体的なエピソードを含めて",
   "hobby": "趣味。ガンダムUCエンゲージ、漫画（LINEマンガ/ピッコマ）、音楽など。具体的な内容や感想を含めて2-3段落で",
   "trend": "その日のトレンドへの一言所感（ニュース/ネット/買い物/地域などジャンル不問）。具体的な感想や家族との会話を含めて2-3段落で",
@@ -748,7 +869,7 @@ JSONだけを出力する。文章トーンは野原ひろし風の口調で、�
 `
   const userPrompt = '上記JSON schemaどおりに、JSONだけで返してください。各セクションは具体的なエピソード、会話、感情描写を豊富に含めてください。'
 
-  let { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, trend, mood, thanks, tomorrow } = buildOfflineDiary(dayInfo)
+  let { quip, work, workLearning, money, moneyTip, parenting, dadpt, hobby, trend, mood, thanks, tomorrow } = buildOfflineDiary(dayInfo, repetition)
 
   // AI設定の読み込み（優先順位: 環境変数 > 設定ファイル）
   const aiConfig = await loadAIModelConfig(repoRoot)
