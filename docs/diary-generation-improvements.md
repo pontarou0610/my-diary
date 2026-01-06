@@ -14,14 +14,14 @@
 ## モデル選択（OpenAI）
 優先順位:
 1. `OPENAI_MODEL`（強制指定）
-2. `OPENAI_PREFERRED_MODELS`（優先モデル配列。JSON配列 or カンマ区切り）
-3. スクリプト内の既定優先リスト
-4. `config/ai-model.json` の `openai.defaultModel`
+2. `OPENAI_PREFERRED_MODELS`（優先モデル配列。JSON配列 or カンマ区切り。未設定ならスキップ）
+3. `config/ai-model.json` の `openai.defaultModel`
+4. スクリプト内の既定優先リスト
 
 例（PowerShell）:
 ```powershell
 $env:OPENAI_API_KEY = "YOUR_API_KEY"
-$env:OPENAI_PREFERRED_MODELS = '["gpt-5.1","gpt-5.2","gpt-5","gpt-4.1","gpt-4o-mini"]'
+$env:OPENAI_PREFERRED_MODELS = '["gpt-5.2","gpt-5.1","gpt-5","gpt-4.1","gpt-4o-mini"]'
 node scripts/generate.mjs
 ```
 

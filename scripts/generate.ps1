@@ -3,7 +3,7 @@
   ローカル実行向け（CI は scripts/generate.mjs を使用）
 
   Usage:
-    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-4o]
+    pwsh scripts/generate.ps1 [-Date yyyy-MM-dd] [-Publish] [-UseAI] [-Model gpt-5.2]
 *#>
 param(
   [datetime]$Date = (Get-Date),
@@ -17,22 +17,28 @@ $ErrorActionPreference = 'Stop'
 function Get-AIModelConfig {
   param([string]$RepoRoot)
   $configPath = Join-Path $RepoRoot 'config/ai-model.json'
+  $fallback = @{ defaultModel = 'gpt-4o-mini'; maxTokens = 1600; temperature = 0.9 }
   if (-not (Test-Path $configPath)) {
-    return @{ defaultModel = 'gpt-4o'; maxTokens = 1600; temperature = 0.9 }
+    return $fallback
   }
   try {
-    $config = Get-Content -Path $configPath -Encoding UTF8 | ConvertFrom-Json
-    $defaultModel = $config.openai.defaultModel
+    $config = Get-Content -Raw -Path $configPath -Encoding UTF8 | ConvertFrom-Json
+    $defaultModel = [string]$config.openai.defaultModel
+    if (-not $defaultModel) { $defaultModel = $fallback.defaultModel }
     $modelConfig = $config.openai.models.$defaultModel
+    $maxTokens = $modelConfig.maxTokens
+    $temperature = $modelConfig.temperature
+    if (-not $maxTokens) { $maxTokens = $fallback.maxTokens }
+    if ($null -eq $temperature) { $temperature = $fallback.temperature }
     return @{
       defaultModel = $defaultModel
-      maxTokens    = $modelConfig.maxTokens
-      temperature  = $modelConfig.temperature
+      maxTokens    = $maxTokens
+      temperature  = $temperature
     }
   }
   catch {
     Write-Warning "設定ファイルの読み込みに失敗: $_"
-    return @{ defaultModel = 'gpt-4o'; maxTokens = 1600; temperature = 0.9 }
+    return $fallback
   }
 }
 
@@ -88,6 +94,114 @@ function Get-WeekdayJP {
   return $D.ToString('dddd', $culture)
 }
 
+function Get-SeasonContext {
+  param([datetime]$D)
+  switch ($D.Month) {
+    { $_ -in 12, 1, 2 } { return [pscustomobject]@{ Key = 'winter'; Label = '冬'; Cues = @('乾燥', '加湿器', '底冷え', '湯気', '鍋') } }
+    { $_ -in 3, 4, 5 } { return [pscustomobject]@{ Key = 'spring'; Label = '春'; Cues = @('花粉', '新生活', '薄手の上着', '朝の空気') } }
+    6 { return [pscustomobject]@{ Key = 'rainy'; Label = '梅雨'; Cues = @('湿気', '部屋干し', '傘', '除湿', '雨音') } }
+    { $_ -in 7, 8 } { return [pscustomobject]@{ Key = 'summer'; Label = '夏'; Cues = @('暑さ', '冷房', '汗', '麦茶', '蝉') } }
+    { $_ -in 9, 10, 11 } { return [pscustomobject]@{ Key = 'autumn'; Label = '秋'; Cues = @('金木犀', '衣替え', '涼しい風', '日が短い') } }
+    default { return [pscustomobject]@{ Key = 'unknown'; Label = '季節'; Cues = @() } }
+  }
+}
+
+function Get-CalendarEventContext {
+  param([datetime]$D)
+  $m = $D.Month
+  $day = $D.Day
+
+  if ($m -eq 12 -and $day -eq 31) {
+    return [pscustomobject]@{
+      Key       = 'new_years_eve'
+      Name      = '大晦日'
+      Tags      = @('年末年始', '年末')
+      Keywords  = @('大晦日', '年末', '年越し', '大掃除', '年越しそば')
+      QuipHints = @(
+        '大晦日。鍋の湯気とテレビの音で、年の終わりを実感する。',
+        '大晦日ってだけで、なんか気持ちがソワソワする。'
+      )
+    }
+  }
+  if ($m -eq 1 -and $day -eq 1) {
+    return [pscustomobject]@{
+      Key       = 'new_year_day'
+      Name      = '元日'
+      Tags      = @('年末年始', '正月')
+      Keywords  = @('元日', '正月', '初詣', 'お年玉', '新年')
+      QuipHints = @(
+        '元日。街が静かで、いつもより呼吸が深くなる。',
+        '元日ってだけで、心のメモ帳が一枚新しくなる感じ。'
+      )
+    }
+  }
+  if ($m -eq 1 -and $day -ge 2 -and $day -le 3) {
+    return [pscustomobject]@{
+      Key       = 'new_year'
+      Name      = '正月'
+      Tags      = @('年末年始', '正月')
+      Keywords  = @('正月', '初詣', 'お年玉', '駅伝', '書き初め')
+      QuipHints = @(
+        '正月ムード。テレビをつけると、だいたい駅伝かお笑い。',
+        '正月って、時間の進み方がいつもと違う。'
+      )
+    }
+  }
+  if ($m -eq 12 -and $day -ge 29) {
+    return [pscustomobject]@{
+      Key       = 'year_end'
+      Name      = '年末'
+      Tags      = @('年末年始', '年末')
+      Keywords  = @('年末', '大掃除', '片付け', '買い出し')
+      QuipHints = @(
+        '年末モード。カレンダーを見るたび、なぜか肩が上がる。',
+        '年末ってだけで、家の中の「やること」が増える不思議。'
+      )
+    }
+  }
+  if ($m -eq 12 -and ($day -eq 24 -or $day -eq 25)) {
+    $name = if ($day -eq 24) { 'クリスマスイブ' } else { 'クリスマス' }
+    return [pscustomobject]@{
+      Key       = 'christmas'
+      Name      = $name
+      Tags      = @('クリスマス')
+      Keywords  = @('クリスマス', 'サンタ', 'プレゼント', 'ケーキ', 'チキン', 'イルミネーション')
+      QuipHints = @(
+        'クリスマスの空気。子どものテンションがいつもより1.2倍。',
+        '帰り道のイルミネーションを見て、ちょっとだけ気持ちが上向いた。'
+      )
+    }
+  }
+
+  if ($m -eq 2 -and $day -eq 14) {
+    return [pscustomobject]@{
+      Key       = 'valentine'
+      Name      = 'バレンタイン'
+      Tags      = @('バレンタイン')
+      Keywords  = @('バレンタイン', 'チョコ', '甘いもの')
+      QuipHints = @(
+        'バレンタインの気配。甘い匂いに心が揺れる。',
+        'バレンタイン。イベントは小さくても、家の空気はちょい甘い。'
+      )
+    }
+  }
+
+  if ($m -eq 10 -and $day -eq 31) {
+    return [pscustomobject]@{
+      Key       = 'halloween'
+      Name      = 'ハロウィン'
+      Tags      = @('ハロウィン')
+      Keywords  = @('ハロウィン', '仮装', 'お菓子')
+      QuipHints = @(
+        'ハロウィンの空気。子どもはイベントに強い。',
+        'ハロウィン。お菓子の話題で家族会議が始まる。'
+      )
+    }
+  }
+
+  return $null
+}
+
 function Get-TitleFromQuip {
   param([string]$DateString, [string]$Quip)
   $clean = (Protect-Privacy $Quip).Replace("`r", '').Replace("`n", ' ').Trim()
@@ -118,10 +232,16 @@ function Get-SideJobPlan {
 }
 
 function Get-PexelsQuery {
-  param([string]$Hobby, [string]$Parenting, [string]$Work)
-  $extraTags = @('昼', '夜', '夕方', '朝', '雨', '晴れ', 'リビング', 'カフェ', '公園', '街', '家族')
+  param(
+    [string]$Hobby,
+    [string]$Parenting,
+    [string]$Work,
+    [string]$Season,
+    [string]$EventName
+  )
+  $extraTags = @('昼', '夜', '夕方', '朝', '雨', '晴れ', 'リビング', 'カフェ', '公園', '街', '家族', $Season, $EventName) | Where-Object { $_ }
   $extra = Get-Random -InputObject $extraTags
-  $base = ("$Hobby $Parenting $Work").Trim()
+  $base = ("$Hobby $Parenting $Work $Season $EventName").Trim()
   $q = ("$base $extra").Trim()
   if (-not $q) { $q = '東京 日常 家庭' }
   return $q
@@ -196,6 +316,10 @@ $schoolJP = if ($plan.SchoolEventOnSaturday) { 'あり' } else { 'なし' }
 $pdayJP = if ($plan.PlannedSideJobDay -eq 'Saturday') { '土曜' } elseif ($plan.PlannedSideJobDay -eq 'Sunday') { '日曜' } else { 'なし' }
 $todaySJ = if ($plan.IsTodaySideJob) { 'はい' } else { 'いいえ' }
 $weekdayJP = Get-WeekdayJP -D $Date
+$season = Get-SeasonContext -D $Date
+$event = Get-CalendarEventContext -D $Date
+$seasonLine = "季節: $($season.Label)（キーワード例: $([string]::Join('、', $season.Cues)))。"
+$eventLine = if ($event) { "行事/イベント: $($event.Name)（本文のどこかで必ず1回は触れる）。" } else { '行事/イベント: 特になし（通常運転でOK）。' }
 
 $recentDiary = Get-RecentDiaryContinuity -RepoRoot $root -Date $Date
 $continuityBlock = ''
@@ -221,6 +345,8 @@ $sys = @"
 あなたは40代の会社員「ぽん次郎」。SES勤務で証券会社に常駐だがフルリモート。妻はさっこ（専業主婦寄り）。家計管理はぽん次郎が手動で、さっこは家計簿をつけず、ファッションなど好きなものにお金を使いがちな浪費家。子どもは3人。長男:聖太郎（高3・大学受験予定だが成績が足りず不安。スーパーでアルバイト中）、長女:蓮子（高1・吹奏楽部。あんさんぶるスターズが好きでファミレスでバイト中）、次男:連次郎丸（小3・不登校気味でRobloxに夢中）。趣味はスマホゲーム「機動戦士ガンダムUCエンゲージ」と、LINEマンガ/ピッコマの無料話を寝る前に読む程度。本業だけでは生活が厳しいため、毎週土曜か日曜のどちらかで日雇いのオフィス移転作業のバイトをしている。肩の力が抜けた口語で、所々に小ネタを挟み、生活の具体物（天気・家事・音・匂い）を織り交ぜる。固有名詞や正確な地名はぼかす。旬なトレンド（ニュース/ネット話題/季節の行事）を軽く一言まぶす。
 スタイル: 野原ひろし風の一人称「オレ」。庶民的でユーモラス、家族への愛情と弱音がちらつくが、最終的には前向きに落とす。
 今日の日付: $($Date.ToString('yyyy-MM-dd'))（$weekdayJP）。日付・曜日・「明日」「週末」「来週」などの表現が矛盾しないよう整合を取る。
+$seasonLine
+$eventLine
 SEO を意識して、冒頭や各セクションの前半にその日のテーマ・キーワード（天気/体調/日雇い/子育て/趣味/お金）が自然に入るように書く。見出し直下で要点を一言入れて検索で拾われやすくする。
 毎日同じ雰囲気にならないよう、日替わりで焦点を変える（例: 仕事の日は学び深掘り、家族の日は会話描写多め、趣味の日はレビューっぽく、金曜日は週末準備など）か、切り出し方を変えて一言めを変化させる。
 直近日記がある場合は内容と矛盾させない（必要なら「昨日の続き」を1文だけ回収。本文に日付は書かない）。
@@ -300,6 +426,18 @@ if ($UseAI) {
         $mood = $json.mood
         $thanks = $json.thanks
         $tomorrow = $json.tomorrow
+
+        if ($event -and $event.Keywords -and $event.Keywords.Count -gt 0) {
+          $hay = @($quip, $work, $workLearning, $money, $moneyTip, $parenting, $dadpt, $hobby) -join "`n"
+          $hasMention = $false
+          foreach ($k in $event.Keywords) {
+            if ($k -and $hay -like "*$k*") { $hasMention = $true; break }
+          }
+          if (-not $hasMention) {
+            $extra = if ($event.QuipHints -and $event.QuipHints.Count -gt 0) { $event.QuipHints[0] } else { "そういえば今日は$($event.Name)。" }
+            $quip = (@($quip, $extra) | Where-Object { $_ }) -join ' '
+          }
+        }
       }
     }
     catch {
@@ -312,20 +450,25 @@ if ($UseAI) {
 }
 
 if (-not $quip) {
-  $quips = @(
-    '靴下が左右で違っても、満員電車なら誰も気づかない。',
-    '在宅とコーヒーの消費量は比例する気がする。',
-    '子の寝落ち=親の勝利。ただし親も一緒に寝落ちがオチ。',
-    '締切は敵じゃない。味方につけると強い。',
-    '財布の現金、なぜか消える手品。'
-  )
+  $quips = if ($event -and $event.QuipHints -and $event.QuipHints.Count -gt 0) {
+    $event.QuipHints
+  }
+  else {
+    @(
+      '靴下が左右で違っても、満員電車なら誰も気づかない。',
+      '在宅とコーヒーの消費量は比例する気がする。',
+      '子の寝落ち=親の勝利。ただし親も一緒に寝落ちがオチ。',
+      '締切は敵じゃない。味方につけると強い。',
+      '財布の現金、なぜか消える手品。'
+    )
+  }
   $quip = Get-Random -InputObject $quips
 }
 
 $coverRelative = $null
 if ($env:PEXELS_API_KEY) {
   try {
-    $q = Get-PexelsQuery -Hobby $hobby -Parenting $parenting -Work $work
+    $q = Get-PexelsQuery -Hobby $hobby -Parenting $parenting -Work $work -Season $season.Label -EventName ($event.Name)
     $page = Get-Random -Minimum 1 -Maximum 6
     $perPage = 15
     Add-Type -AssemblyName System.Web
@@ -352,12 +495,16 @@ if ($env:PEXELS_API_KEY) {
 
 $title = Get-TitleFromQuip -DateString $Date.ToString('yyyy-MM-dd') -Quip $quip
 
+$tags = @('日記', '仕事', 'お金', '子育て', '趣味')
+if ($event -and $event.Tags) { $tags += @($event.Tags) }
+$tagsToml = ($tags | Where-Object { $_ } | Select-Object -Unique | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ', '
+
 $fmLines = @(
   '+++',
   "title = `"$title`"",
   "date = $($Date.ToString('yyyy-MM-ddTHH:mm:sszzz'))",
   "draft = $draft",
-  'tags = ["日記", "仕事", "お金", "子育て", "趣味"]',
+  "tags = [$tagsToml]",
   'categories = ["日常"]'
 )
 if ($coverRelative) {

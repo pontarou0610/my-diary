@@ -1,6 +1,6 @@
 {
   "openai": {
-    "defaultModel": "gpt-4o-mini",
+    "defaultModel": "gpt-5.2",
     "models": {
       "gpt-4o-mini": {
         "maxTokens": 4096,

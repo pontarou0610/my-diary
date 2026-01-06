@@ -28,16 +28,16 @@
 #### AIモデルの設定（推奨）
 
 - `config/ai-model.json` でモデルを一元管理
-  - **GPT-5.1公開時は `defaultModel` を `"gpt-5.1"` に変更するだけで全体に反映**
+  - **`defaultModel` を変更するだけで全体に反映（例: `"gpt-5.2"`）**
   - 各モデルのパラメータ（maxTokens, temperature）も設定可能
 
 ```json
 {
   "openai": {
-    "defaultModel": "gpt-4o",  // ← GPT-5.1公開後はここを "gpt-5.1" に変更
+    "defaultModel": "gpt-5.2",
     "models": {
-      "gpt-4o": { ... },
-      "gpt-5.1": { ... }
+      "gpt-5.2": { ... },
+      "gpt-4o-mini": { ... }
     }
   }
 }
@@ -46,11 +46,11 @@
 #### 環境変数での設定（オプション）
 
 - 環境変数に API キーを設定: `setx OPENAI_API_KEY "sk-..."`
-- モデル指定（設定ファイルより優先）: `setx OPENAI_MODEL "gpt-4o"`
+- モデル指定（設定ファイルより優先）: `setx OPENAI_MODEL "gpt-5.2"`
 - もしくは、リポジトリ直下に `.env` を置く
   - 例:
     - `OPENAI_API_KEY=sk-...`
-    - `OPENAI_MODEL=gpt-4o`（省略時は設定ファイルの defaultModel を使用）
+    - `OPENAI_MODEL=gpt-5.2`（省略時は設定ファイルの defaultModel を使用）
 
 #### 優先順位
 
