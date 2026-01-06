@@ -84,8 +84,8 @@
     {{- end }}
   </div>
 
-  {{ partial "adsense-multiplex.html" (dict "slot" (site.Params.adsense.multiplexSlot | default "")) }}
-
   {{ template "_internal/pagination.html" . }}
+
+  {{ partial "adsense-multiplex.html" (dict "slot" (site.Params.adsense.multiplexSlot | default "")) }}
 </section>
 {{ end }}

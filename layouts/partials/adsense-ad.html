@@ -2,7 +2,7 @@
 {{- $slot := .slot | default site.Params.adsense.articleSlot | default "" }}
 {{- if and $client $slot }}
 <div class="ad-container ad-container--in-article">
-  <span class="ad-label">広告</span>
+  <span class="ad-label">スポンサーリンク</span>
   <ins class="adsbygoogle"
     style="display:block"
     data-ad-client="{{ $client }}"

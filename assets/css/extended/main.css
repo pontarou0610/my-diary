@@ -449,32 +449,32 @@ p {
 
 /* Ads */
 .ad-container {
-  margin: 2.5rem 0;
-  padding: 1rem;
+  margin: 4rem 0; /* Increased margin for better separation */
+  padding: 1.5rem 1rem;
   border: 1px dashed var(--border-color);
   border-radius: var(--radius-lg);
   background: #ffffff;
   box-shadow: var(--shadow-sm);
+  text-align: center; /* Center content */
 }
 
 .ad-container--in-article {
-  margin-top: 2rem;
-  margin-bottom: 2.5rem;
+  margin-top: 4rem;
+  margin-bottom: 4rem;
 }
 
 .ad-container--multiplex {
-  margin-top: 2.5rem;
-  margin-bottom: 2.5rem;
+  margin-top: 4rem;
+  margin-bottom: 4rem;
 }
 
 .ad-label {
   display: inline-block;
-  font-size: 0.8rem;
+  font-size: 0.9rem; /* Slightly larger */
   font-weight: 700;
   color: var(--text-muted);
   letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.75rem;
 }
 
 /* Post Card (List) */
